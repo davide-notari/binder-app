@@ -32,12 +32,14 @@ tools/                            export / verify scripts
 ```json
 {
   "schema": 1,
+  "sections": ["promo", "main"],      // known sections, in display order
   "cards": [
     {
-      "id": "celebi",                 // [a-z0-9-], also the folder name cards/<id>.card
+      "id": "236-139-celebi",         // [a-z0-9-], also the folder name cards/<id>.card
       "name": "Celebi",               // display name (Italian UI)
-      "number": 236,                  // card number
-      "order": 236,                   // position in the binder (sort ascending, then by id)
+      "number": "236",                // STRING, exactly as printed on the card: "236", "10-05-2026", "SVP 001"...
+      "section": "main",              // "main" = regular cards, "promo" = promo cards
+      "order": 236,                   // position inside its section (number, decimals allowed; sort ascending, then by id)
       "version": "61497c5479eb",      // content hash of the bundle: changes whenever any file changes
       "path": "cards/celebi.card",
       "immersive": true,              // has an immersive camera track
@@ -49,6 +51,16 @@ tools/                            export / verify scripts
 ```
 
 `base` = card.json + thumb + front + artwork. `full` / `half` = all layer files of that resolution.
+
+**Sections.** Promo cards often have no regular number (for example a date) and must not be mixed with the
+regular cards. The app groups cards by `section` and sorts each group by `order`. Where the promo section is shown
+(a separate area of the binder, or before card 1) is a UI decision, not a data one: the data supports both.
+Unknown section values must be shown after the known ones, never dropped. The `cards` array is already sorted
+(section in `sections` order, then `order`, then `id`), but the app must not rely on that.
+
+`order` defaults (exporter): a `DD-MM-YYYY` date → `YYYYMMDD` (promos sort chronologically), an integer → itself,
+otherwise the last group of digits, otherwise 0. Davide can override it (`--order`, e.g. `235.5` to insert a card).
+`number` is display text only: never parse it in the app.
 
 ## 3. World and camera conventions
 
@@ -71,7 +83,7 @@ Top level:
 | key | type | meaning |
 |---|---|---|
 | `schema` | int | 1 |
-| `id`, `name`, `number`, `order`, `version` | | as in index.json |
+| `id`, `name`, `number` (string), `section`, `order`, `version` | | as in index.json |
 | `artPx` | [w, h] | artwork size in pixels (standard 3024×4158) |
 | `pxPerUnit` | float | artwork pixels per world unit on the window plane |
 | `camera` | object | `lensMm`, `sensorHeightMm` (36), `vfovRad`, `aspect`, `near`, `far`, `homeDistance`, `homePosition`, `homeRotation` (quaternion [x,y,z,w]) |

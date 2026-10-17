@@ -114,8 +114,11 @@ later: keep the UI layer separate from data and rendering.
    `display-mode: standalone`): short illustrated steps "Condividi → Aggiungi alla schermata Home", then open the app
    from the icon.
 2. **Chiave di accesso** — paste field, "Continua"; errors in plain Italian ("Chiave non valida", "Nessuna connessione").
-3. **Raccoglitore** — grid of thumbnails ordered by `order`; small badge on cards with immersive; a cloud badge on
-   cards whose 3D is not downloaded (when offline). Tap → card view.
+3. **Raccoglitore** — grid of thumbnails grouped by `section` and ordered by `order` (CARD_FORMAT.md §2).
+   Promo cards ("Promo", with their printed number such as a date) are kept apart from the regular cards
+   ("Carte"): v1 shows the promo group first, before card 1, with its own small header; keep this placement easy to
+   change (Davide may prefer a separate area). Small badge on cards with immersive; a cloud badge on cards whose 3D
+   is not downloaded (when offline). Tap → card view. Show `number` as text, exactly as given.
 4. **Carta** (card view), with a mode button **Carta / Artwork**:
    - *Carta*: `front.webp` (or the artwork if missing), fitted to the screen.
    - *Artwork*: the WebGL view in the card's aspect, rounded corners; button **3D** (on/off).
