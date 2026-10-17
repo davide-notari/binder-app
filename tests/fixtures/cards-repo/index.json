@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "cards": [
+    {
+      "id": "testcard",
+      "name": "Carta di prova",
+      "number": 1,
+      "order": 1,
+      "version": "61497c5479eb",
+      "path": "cards/testcard.card",
+      "immersive": true,
+      "hasFront": true,
+      "bytes": {
+        "base": 251874,
+        "full": 27200,
+        "half": 23878
+      }
+    },
+    {
+      "id": "testcard-tilt",
+      "name": "Prova solo 3D",
+      "number": 2,
+      "order": 2,
+      "version": "ced518839fbe",
+      "path": "cards/testcard-tilt.card",
+      "immersive": false,
+      "hasFront": false,
+      "bytes": {
+        "base": 222377,
+        "full": 27200,
+        "half": 23878
+      }
+    }
+  ]
+}

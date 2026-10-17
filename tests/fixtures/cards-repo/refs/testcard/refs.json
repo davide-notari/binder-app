@@ -1,0 +1,31 @@
+{
+  "card": "testcard",
+  "version": "61497c5479eb",
+  "resolution": [
+    1080,
+    1484
+  ],
+  "fps": 30,
+  "frames": [
+    {
+      "file": "f_0001.png",
+      "sourceFrame": 1,
+      "trackTime": 0.0
+    },
+    {
+      "file": "f_0143.png",
+      "sourceFrame": 143,
+      "trackTime": 3.7333
+    },
+    {
+      "file": "f_0256.png",
+      "sourceFrame": 256,
+      "trackTime": 7.5
+    },
+    {
+      "file": "f_0368.png",
+      "sourceFrame": 368,
+      "trackTime": 11.2333
+    }
+  ]
+}
