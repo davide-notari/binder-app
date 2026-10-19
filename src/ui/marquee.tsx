@@ -37,10 +37,16 @@ export function Marquee({ text, class: className }: Props) {
       setOverflow(Math.max(0, Math.ceil(f.offsetWidth - o.clientWidth)));
     };
     measure();
-    const observer = new ResizeObserver(measure);
+    // measured on the next frame: re-rendering inside the observer callback would chain resize notifications
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    });
     observer.observe(o);
     observer.observe(f);
     return () => {
+      cancelAnimationFrame(frame);
       observer.disconnect();
     };
   }, [text]);
