@@ -53,9 +53,11 @@ npm run preview                 serve dist/ at http://localhost:4173/binder-app/
 npm run typecheck               TypeScript only
 npm run lint                    ESLint (type-checked rules)
 npm run format / format:check   Prettier write / check
-npm test                        unit tests + WebKit tests
+npm test                        unit tests + WebKit tests + PWA test (builds first)
 npm run test:unit               Vitest (tests/unit)
 npm run test:e2e                Playwright WebKit, iPhone 15 profile (tests/e2e; own dev server on port 5174)
+npm run test:pwa                build + offline app shell test (Chromium: Playwright's WebKit does not let the
+                                service worker control pages)
 CARDS_DIR=../binder-cards npm run test:e2e   same tests on the real cards (local only, nothing copied)
 FIDELITY_SAVE=1 npx playwright test tests/e2e/fidelity.spec.ts   also save side-by-side + heatmap of passing frames
 python3 tools/make_premultiply_fixture.py   regenerate src/dev/premultiply-fixture.ts (needs pillow, numpy)
@@ -66,6 +68,10 @@ python3 tools/make_premultiply_fixture.py   regenerate src/dev/premultiply-fixtu
   (tap: hide/show panel, press and hold: reference frame); `/?dev=premultiply` checks the premultiplied upload.
 - Renderer sampling follows RENDERING.md §2a (reference pyramid + OpenCV bicubic + half-pixel grid); memory plan §6a.
 - Dev server home (`/`): temporary card list → card view on the local cards (the real binder comes in M4).
+  `?source=github&browser=1` runs the real flow (key screen, GitHub source, cache) on the dev server; `?browser=1`
+  also skips the installation screen in the published app (desktop testing).
+- GitHub flow tests (tests/e2e/github.spec.ts) mock api.github.com and use persistent WebKit profiles: the
+  default ephemeral contexts lose the Cache API on reload.
   `?debug=1` debug overlay (fps, memory plan, tilt tuning; remembered for the session, `?debug=0` turns it off),
   `?speed=10` faster immersive flight (tests), `/?dev=memory` GPU memory test page for the iPhone.
 - `CARDS_DIR=../binder-cards npm run test:unit` also checks tilt fit and memory plan on the real cards.

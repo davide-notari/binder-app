@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import preact from '@preact/preset-vite';
 import { defineConfig, loadEnv } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 import { devCards } from './tools/dev-cards.ts';
 
 const projectRoot = fileURLToPath(new URL('.', import.meta.url));
@@ -22,15 +23,44 @@ function appVersion(): string {
   return `${pkg.version}+${commit}`;
 }
 
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ command, mode, isPreview }) => {
   const env = loadEnv(mode, projectRoot, 'VITE_');
   const configuredCards = env.VITE_LOCAL_CARDS ?? '';
   const localCards = path.resolve(projectRoot, configuredCards === '' ? DEFAULT_LOCAL_CARDS : configuredCards);
 
   return {
-    // GitHub Pages serves the app from https://<owner>.github.io/binder-app/
-    base: command === 'build' ? '/binder-app/' : '/',
-    plugins: [preact(), devCards(localCards)],
+    // GitHub Pages serves the app from https://<owner>.github.io/binder-app/ (also `vite preview` of the build)
+    base: command === 'serve' && !isPreview ? '/' : '/binder-app/',
+    plugins: [
+      preact(),
+      devCards(localCards),
+      // App shell only (SPEC.md §7): card data is cached by src/data/store.ts, never by the service worker.
+      VitePWA({
+        registerType: 'prompt',
+        injectRegister: false,
+        manifest: {
+          name: 'Raccoglitore',
+          description: 'Il raccoglitore delle carte',
+          short_name: 'Raccoglitore',
+          lang: 'it',
+          display: 'standalone',
+          orientation: 'portrait',
+          background_color: '#111111',
+          theme_color: '#111111',
+          icons: [
+            { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+            { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+            { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          ],
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,png,webmanifest}'],
+          cleanupOutdatedCaches: true,
+          runtimeCaching: [],
+        },
+        devOptions: { enabled: false },
+      }),
+    ],
     define: {
       __APP_VERSION__: JSON.stringify(appVersion()),
     },

@@ -209,7 +209,7 @@ export function parseCardIndex(json: unknown): CardIndex {
     const id = str(c.id, `${p}.id`);
     if (!ID_PATTERN.test(id)) invalid(`${p}.id`, 'lowercase a-z, 0-9 and "-"');
     const path = str(c.path, `${p}.path`);
-    if (!/^cards\/[a-z0-9-]+\.card$/.test(path)) invalid(`${p}.path`, '"cards/<id>.card"');
+    if (path !== `cards/${id}.card`) invalid(`${p}.path`, `"cards/${id}.card"`);
     const bytes = obj(c.bytes, `${p}.bytes`);
     return {
       id,

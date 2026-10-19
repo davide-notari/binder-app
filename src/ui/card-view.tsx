@@ -8,7 +8,7 @@ import {
   type CardLayer,
   type TextureResolution,
 } from '../data/card-format';
-import { fetchCard, type CardSource } from '../data/source';
+import { fetchCard, SourceError, type CardSource } from '../data/source';
 import { CardScene, type LayerFetcher } from '../interaction/card-scene';
 import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX } from '../interaction/motion';
 import { requestMotionPermission } from '../interaction/tilt';
@@ -144,9 +144,10 @@ export function CardView({ source, entry, onBack }: Props) {
         onProgress: (loaded, total) => {
           setProgress([loaded, total]);
         },
-        onError: () => {
+        onError: (error) => {
           setProgress(null);
-          setNotice({ text: strings.layersError });
+          const offline = error instanceof SourceError && error.kind === 'network';
+          setNotice({ text: offline ? strings.offline3d : strings.layersError });
         },
         onImmersiveEnd: () => {
           dispatch({ type: 'immersive-end' });

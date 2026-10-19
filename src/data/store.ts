@@ -1,0 +1,212 @@
+// Card data on the device (SPEC.md §5): index refresh with ETag, version invalidation, base prefetch,
+// on-demand layers with an LRU size limit. Files live in the Cache API under version-specific keys
+// (…/__cards/<id>/<version>/<file>), the index and the LRU bookkeeping in IndexedDB. The service worker never
+// touches this cache: versions and eviction stay under the app's control.
+import { parseCardIndex, type CardIndex, type CardIndexEntry } from './card-format';
+import { idbDelete, idbEntries, idbGet, idbSet } from './idb';
+import { getCachedIndex, getLayerCacheLimit, setCachedIndex } from './settings';
+import type { CardSource, RemoteSource } from './source';
+
+const CACHE_NAME = 'binder-cards-v1';
+const KEY_PREFIX = '__cards/';
+const BASE_FILES = ['card.json', 'thumb.webp', 'artwork.webp'] as const;
+const PREFETCH_CONCURRENCY = 3;
+
+interface LayerRecord {
+  readonly version: string;
+  readonly bytes: number;
+  readonly lastUsed: number;
+}
+
+export interface RefreshResult {
+  readonly index: CardIndex;
+  /** Cards that were not in the previous index (0 on the first start). */
+  readonly newCards: number;
+  /** False when the server answered "not modified". */
+  readonly changed: boolean;
+}
+
+function keyRoot(): string {
+  return new URL(`${import.meta.env.BASE_URL}${KEY_PREFIX}`, location.origin).href;
+}
+
+function cacheKey(entry: CardIndexEntry, file: string): string {
+  return `${keyRoot()}${entry.id}/${entry.version}/${file}`;
+}
+
+/** id and version of a cache key, or null for anything else. */
+function parseKey(url: string): { id: string; version: string; file: string } | null {
+  const root = keyRoot();
+  if (!url.startsWith(root)) return null;
+  const [id, version, ...file] = url.slice(root.length).split('/');
+  return id && version && file.length > 0 ? { id, version, file: file.join('/') } : null;
+}
+
+const CONTENT_TYPES: Readonly<Record<string, string>> = {
+  json: 'application/json',
+  webp: 'image/webp',
+  png: 'image/png',
+};
+
+function typed(blob: Blob, file: string): Blob {
+  const type = CONTENT_TYPES[file.split('.').pop() ?? ''] ?? 'application/octet-stream';
+  return blob.type === type ? blob : new Blob([blob], { type });
+}
+
+export class CardStore implements CardSource {
+  private index: CardIndex | null = null;
+  /** Downloads in progress, by cache key: concurrent requests for one file share a single download. */
+  private readonly inflight = new Map<string, Promise<Blob>>();
+
+  constructor(private readonly remote: RemoteSource) {}
+
+  get currentIndex(): CardIndex | null {
+    return this.index;
+  }
+
+  /** The index saved by the last successful refresh (offline start); null on the first start. */
+  async loadCachedIndex(): Promise<CardIndex | null> {
+    const cached = await getCachedIndex();
+    if (!cached) return null;
+    this.index = parseCardIndex(cached.json);
+    return this.index;
+  }
+
+  /**
+   * Downloads index.json if it changed (ETag), then deletes the cached files of versions and cards that are
+   * no longer listed. Throws SourceError (unauthorized, not-found, rate-limited, network) or CardFormatError.
+   */
+  async refreshIndex(): Promise<RefreshResult> {
+    const cached = await getCachedIndex();
+    const result = await this.remote.fetchIfChanged('index.json', this.index && cached ? cached.etag : null);
+    if (!result.changed && this.index) return { index: this.index, newCards: 0, changed: false };
+    if (!result.changed) throw new Error('index not modified but not cached');
+    const json = JSON.parse(await result.blob.text()) as unknown;
+    const index = parseCardIndex(json);
+    const previous = this.index;
+    const newCards = previous ? index.cards.filter((c) => !previous.cards.some((p) => p.id === c.id)).length : 0;
+    await setCachedIndex({ json, etag: result.etag });
+    this.index = index;
+    await this.prune(index);
+    return { index, newCards, changed: true };
+  }
+
+  /**
+   * Downloads the base files of every card that are not cached yet, so the binder works offline. A file that
+   * cannot be downloaded is skipped (it is retried at the next start); resolves with the number of failures.
+   */
+  async prefetchBase(onProgress?: (done: number, total: number) => void): Promise<number> {
+    const index = this.index;
+    if (!index) return 0;
+    let failures = 0;
+    const jobs = index.cards.flatMap((card) =>
+      [...BASE_FILES, ...(card.hasFront ? ['front.webp'] : [])].map((file) => ({ card, file })),
+    );
+    let done = 0;
+    let next = 0;
+    const worker = async () => {
+      while (next < jobs.length) {
+        const job = jobs[next++];
+        if (!job) break;
+        try {
+          if (!(await this.isCached(job.card, job.file))) await this.fetchFile(`${job.card.path}/${job.file}`);
+        } catch {
+          failures++;
+        }
+        onProgress?.(++done, jobs.length);
+      }
+    };
+    await Promise.all(Array.from({ length: PREFETCH_CONCURRENCY }, worker));
+    return failures;
+  }
+
+  /** A file of the card repository: from the cache when this version has it, otherwise downloaded and cached. */
+  async fetchFile(path: string, signal?: AbortSignal): Promise<Blob> {
+    const entry = this.index?.cards.find((c) => path.startsWith(`${c.path}/`));
+    if (!entry) return this.remote.fetchFile(path, signal);
+    const file = path.slice(entry.path.length + 1);
+    const key = cacheKey(entry, file);
+    const pending = this.inflight.get(key);
+    if (pending) return pending;
+    const download = (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const hit = await cache.match(key);
+      if (hit) return typed(await hit.blob(), file);
+      const blob = typed(await this.remote.fetchFile(path, signal), file);
+      await cache.put(key, new Response(blob, { headers: { 'Content-Type': blob.type } }));
+      if (file.startsWith('layers/')) await this.addLayerBytes(entry, blob.size);
+      return blob;
+    })().finally(() => {
+      this.inflight.delete(key);
+    });
+    this.inflight.set(key, download);
+    return download;
+  }
+
+  async isCached(entry: CardIndexEntry, file: string): Promise<boolean> {
+    return (await (await caches.open(CACHE_NAME)).match(cacheKey(entry, file))) !== undefined;
+  }
+
+  /** Marks a card as just opened (LRU). */
+  async touch(entry: CardIndexEntry): Promise<void> {
+    const record = await idbGet<LayerRecord>('layers', entry.id);
+    const bytes = record?.version === entry.version ? record.bytes : 0;
+    await idbSet('layers', entry.id, { version: entry.version, bytes, lastUsed: Date.now() } satisfies LayerRecord);
+  }
+
+  /** Total size of the cached 3D layers. */
+  async layerBytes(): Promise<number> {
+    return (await idbEntries<LayerRecord>('layers')).reduce((sum, [, r]) => sum + r.bytes, 0);
+  }
+
+  /** Deletes all cached 3D layers ("Svuota cache 3D"); base files stay. */
+  async clearLayers(): Promise<void> {
+    for (const [id] of await idbEntries<LayerRecord>('layers')) await this.deleteLayers(id);
+  }
+
+  private async addLayerBytes(entry: CardIndexEntry, bytes: number): Promise<void> {
+    const record = await idbGet<LayerRecord>('layers', entry.id);
+    const previous = record?.version === entry.version ? record.bytes : 0;
+    await idbSet('layers', entry.id, {
+      version: entry.version,
+      bytes: previous + bytes,
+      lastUsed: Date.now(),
+    } satisfies LayerRecord);
+    await this.evict(entry.id);
+  }
+
+  /** Removes the layers of the least recently opened cards until the cache fits its limit. */
+  private async evict(keepId: string): Promise<void> {
+    const limit = await getLayerCacheLimit();
+    const records = (await idbEntries<LayerRecord>('layers')).sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+    let total = records.reduce((sum, [, r]) => sum + r.bytes, 0);
+    for (const [id, record] of records) {
+      if (total <= limit) break;
+      if (id === keepId || record.bytes === 0) continue;
+      await this.deleteLayers(id);
+      total -= record.bytes;
+    }
+  }
+
+  private async deleteLayers(id: string): Promise<void> {
+    const cache = await caches.open(CACHE_NAME);
+    for (const request of await cache.keys()) {
+      const key = parseKey(request.url);
+      if (key?.id === id && key.file.startsWith('layers/')) await cache.delete(request);
+    }
+    await idbDelete('layers', id);
+  }
+
+  /** Deletes files and bookkeeping of card versions that are not in the index any more. */
+  private async prune(index: CardIndex): Promise<void> {
+    const current = new Set(index.cards.map((c) => `${c.id}/${c.version}`));
+    const cache = await caches.open(CACHE_NAME);
+    for (const request of await cache.keys()) {
+      const key = parseKey(request.url);
+      if (!key || !current.has(`${key.id}/${key.version}`)) await cache.delete(request);
+    }
+    for (const [id, record] of await idbEntries<LayerRecord>('layers')) {
+      if (!current.has(`${id}/${record.version}`)) await idbDelete('layers', id);
+    }
+  }
+}

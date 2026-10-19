@@ -13,9 +13,17 @@ export class SourceError extends Error {
   }
 }
 
+export type ConditionalResult =
+  { readonly changed: false } | { readonly changed: true; readonly blob: Blob; readonly etag: string | null };
+
 export interface CardSource {
   /** Raw bytes of a file, path relative to the cards repository root (e.g. "index.json"). */
   fetchFile(path: string, signal?: AbortSignal): Promise<Blob>;
+}
+
+/** A remote source that also answers conditional requests (ETag), used for index.json. */
+export interface RemoteSource extends CardSource {
+  fetchIfChanged(path: string, etag: string | null): Promise<ConditionalResult>;
 }
 
 export async function fetchJson(source: CardSource, path: string, signal?: AbortSignal): Promise<unknown> {
