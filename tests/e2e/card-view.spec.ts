@@ -99,7 +99,7 @@ test('opening cards repeatedly keeps working on the shared WebGL context', async
   for (let i = 0; i < 6; i++) {
     await openArtwork(page, i % 2 === 0 ? 'testcard' : 'testcard-promo');
     await page.getByRole('button', { name: /Indietro/ }).click();
-    await expect(page.locator('.binder')).toBeVisible();
+    await expect(page.locator('.card-view')).toHaveCount(0);
   }
   const contexts = await page.evaluate(() => document.querySelectorAll('canvas').length);
   expect(contexts).toBe(0); // the shared canvas is detached when no card is open

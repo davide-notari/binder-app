@@ -1,8 +1,27 @@
 .binder {
+  position: relative;
   box-sizing: border-box;
   min-height: 100%;
+  /* --back-progress (card-gestures.ts): 1 = binder in view, 0 = covered by a card (shifted left and dimmed) */
+  transform: translateX(calc(-22% * (1 - var(--back-progress, 1))));
   padding: 0 1rem 2.5rem;
   background: radial-gradient(120% 60% at 50% 0%, #1d1d22 0%, var(--bg) 70%);
+}
+
+.binder::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: calc(0.45 * (1 - var(--back-progress, 1)));
+  pointer-events: none;
+}
+
+.back-animating .binder,
+.back-animating .binder::after {
+  transition:
+    transform 230ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 230ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .binder-header {
@@ -138,7 +157,7 @@
   color: var(--muted);
 }
 
-.binder-badge.flight {
+.binder-badge.immersive {
   margin-left: auto;
 }
 
@@ -156,9 +175,6 @@
 }
 
 .binder-name {
-  overflow: hidden;
   font-size: 0.8125rem;
   font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

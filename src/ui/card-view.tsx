@@ -1,4 +1,4 @@
-// Card view (SPEC.md §6 screen 4): Carta / Artwork, 3D tilt, long press for the immersive flight.
+// Card view (SPEC.md §6 screen 4): Carta / Artwork, 3D tilt, long press for the immersive view.
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import {
   cardFilePath,
@@ -14,7 +14,9 @@ import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX } from '../interaction/motion';
 import { requestMotionPermission } from '../interaction/tilt';
 import { decodeImage } from '../render/textures';
 import { isArtwork, nextMode, type CardEvent, type CardMode } from './card-view-state';
+import { useCardGestures } from './card-gestures';
 import { ChevronLeftIcon } from './icons';
+import { Marquee } from './marquee';
 import { strings } from './strings';
 import './card-view.css';
 
@@ -24,6 +26,14 @@ interface Props {
   readonly onBack: () => void;
   /** All layers of this resolution are now cached (the 3D works offline). */
   readonly onLayersReady?: (resolution: TextureResolution) => void;
+  readonly hasPrevious?: boolean;
+  readonly hasNext?: boolean;
+  /** Swipe to the previous (-1) or next (+1) card, keeping Carta or Artwork. */
+  readonly onNavigate?: (direction: -1 | 1, mode: 'card' | 'artwork-flat') => void;
+  /** Mode to open in (the previous card's, when swiping between cards). */
+  readonly initialMode?: 'card' | 'artwork-flat';
+  /** Set when the view replaces another card: the card slides in from that side. */
+  readonly enterFrom?: 'left' | 'right' | null;
 }
 
 interface Box {
@@ -40,9 +50,6 @@ interface Notice {
 
 /** Side margin of the card inside the screen (CSS px). */
 const MARGIN = 12;
-/** A swipe that starts this close to the left edge and moves this far right goes back to the binder. */
-const EDGE_SWIPE_ZONE = 24;
-const EDGE_SWIPE_DISTANCE = 70;
 
 /** Largest box with this aspect inside the stage; the backing store keeps the aspect within one pixel. */
 function fitBox(stageWidth: number, stageHeight: number, aspect: number): Box {
@@ -78,10 +85,12 @@ function layerFetcher(source: CardSource, cardPath: string, card: Card): LayerFe
   };
 }
 
-export function CardView({ source, entry, onBack, onLayersReady }: Props) {
+export function CardView(props: Props) {
+  const { source, entry, onBack, onLayersReady, hasPrevious = false, hasNext = false } = props;
+  const { onNavigate, initialMode = 'card', enterFrom = null } = props;
   const [card, setCard] = useState<Card | null>(null);
   const [failed, setFailed] = useState(false);
-  const [mode, setMode] = useState<CardMode>('card');
+  const [mode, setMode] = useState<CardMode>(initialMode);
   const [images, setImages] = useState<{ artwork: string | null; front: string | null }>({
     artwork: null,
     front: null,
@@ -95,7 +104,7 @@ export function CardView({ source, entry, onBack, onLayersReady }: Props) {
   const sceneRef = useRef<CardScene | null>(null);
   const loadStarted = useRef(false);
   const press = useRef<{ timer: number; x: number; y: number } | null>(null);
-  const edgeSwipe = useRef<{ x: number; y: number } | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const modeRef = useRef(mode);
   modeRef.current = mode;
   const readyCallback = useRef(onLayersReady);
@@ -244,6 +253,19 @@ export function CardView({ source, entry, onBack, onLayersReady }: Props) {
     press.current = null;
   };
 
+  const gestures = useCardGestures({
+    rootRef,
+    stageRef,
+    enabled: mode !== 'immersive',
+    hasPrevious,
+    hasNext,
+    onDragStart: cancelPress,
+    onBack,
+    onNavigate: (direction) => {
+      onNavigate?.(direction, mode === 'card' ? 'card' : 'artwork-flat');
+    },
+  });
+
   const onPointerDown = (event: PointerEvent) => {
     if (mode !== 'artwork-flat' || !card?.immersive) return;
     cancelPress();
@@ -274,37 +296,24 @@ export function CardView({ source, entry, onBack, onLayersReady }: Props) {
 
   return (
     <div
-      class="card-view"
+      ref={rootRef}
+      class={enterFrom ? 'card-view' : 'card-view push-in'}
       data-mode={mode}
       data-ready={ready ? '1' : '0'}
-      onPointerDown={(e) => {
-        // swipe from the left edge: back to the binder (SPEC.md §6)
-        edgeSwipe.current =
-          e.clientX <= EDGE_SWIPE_ZONE && mode !== 'immersive' ? { x: e.clientX, y: e.clientY } : null;
-      }}
-      onPointerUp={(e) => {
-        const start = edgeSwipe.current;
-        edgeSwipe.current = null;
-        if (start && e.clientX - start.x > EDGE_SWIPE_DISTANCE && Math.abs(e.clientY - start.y) < EDGE_SWIPE_DISTANCE) {
-          onBack();
-        }
-      }}
-      onPointerCancel={() => {
-        edgeSwipe.current = null;
-      }}
+      {...gestures.handlers}
     >
       <header class="card-view-bar">
-        <button type="button" class="bar-button" onClick={onBack}>
+        <button type="button" class="bar-button" onClick={gestures.animateBack}>
           <ChevronLeftIcon />
           <span>{strings.back}</span>
         </button>
         <div class="card-view-title">
-          <span class="card-view-name">{entry.name}</span>
+          <Marquee class="card-view-name" text={entry.name} />
           <span class="card-view-number">{entry.number}</span>
         </div>
       </header>
 
-      <div class="card-view-stage" ref={stageRef}>
+      <div class={enterFrom ? `card-view-stage enter-from-${enterFrom}` : 'card-view-stage'} ref={stageRef}>
         {failed && <p class="card-view-error">{strings.cardError}</p>}
         {mode === 'card' && (images.front ?? images.artwork) && (
           <img

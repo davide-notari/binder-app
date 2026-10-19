@@ -20,19 +20,23 @@ export function GearIcon() {
   );
 }
 
-/** Immersive flight: a camera path into the scene. */
-export function FlightIcon() {
+/** Immersive card: frames receding into depth, like entering the drawing. */
+export function ImmersiveIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" class="icon">
-      <path d="M4 18c3-1 5-4 7-7s4-5 8-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-      <path
-        d="m15.5 4.2 3.6.8-1.2 3.4"
+      <rect x="2.5" y="4" width="19" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.7" />
+      <rect
+        x="6.5"
+        y="7.5"
+        width="11"
+        height="9"
+        rx="2"
         fill="none"
         stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+        stroke-width="1.7"
+        opacity="0.75"
       />
+      <rect x="9.75" y="10.25" width="4.5" height="3.5" rx="1" fill="currentColor" opacity="0.55" />
     </svg>
   );
 }

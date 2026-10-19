@@ -1,5 +1,6 @@
 import type { FunctionComponent } from 'preact';
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import { groupCards } from './data/binder';
 import { CardFormatError, type CardIndex, type CardIndexEntry } from './data/card-format';
 import { GitHubSource } from './data/github-source';
 import { clearToken, getToken, setToken } from './data/settings';
@@ -103,6 +104,12 @@ function useOnline(): boolean {
   return online;
 }
 
+interface OpenCard {
+  readonly entry: CardIndexEntry;
+  readonly mode: 'card' | 'artwork-flat';
+  readonly enterFrom: 'left' | 'right' | null;
+}
+
 interface FlowProps {
   readonly debugOn: boolean;
   readonly onDebugChange: (on: boolean) => void;
@@ -113,7 +120,7 @@ function AppFlow({ debugOn, onDebugChange }: FlowProps) {
   const [store, setStore] = useState<CardStore | null>(null);
   const [index, setIndex] = useState<CardIndex | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [open, setOpen] = useState<CardIndexEntry | null>(null);
+  const [open, setOpen] = useState<OpenCard | null>(null);
   const [progress, setProgress] = useState<readonly [number, number] | null>(null);
   const [networkFailed, setNetworkFailed] = useState(false);
   const [with3d, setWith3d] = useState<ReadonlySet<string>>(new Set());
@@ -287,36 +294,52 @@ function AppFlow({ debugOn, onDebugChange }: FlowProps) {
       />
     );
   }
-  if (open) {
-    return (
-      <CardView
+  // the binder stays mounted under the card view: going back reveals it (and keeps its scroll position)
+  const ordered = index ? groupCards(index).flatMap((g) => g.cards) : [];
+  const position = open ? ordered.findIndex((c) => c.id === open.entry.id) : -1;
+  return (
+    <>
+      <Binder
+        index={index}
         source={store}
-        entry={open}
-        onLayersReady={(resolution) => {
-          void store.markLayersComplete(open, resolution).then(() => update3d(store));
+        notice={notice}
+        progress={progress}
+        offline={!online || networkFailed}
+        with3d={with3d}
+        covered={open !== null}
+        onOpen={(entry) => {
+          void store.touch(entry);
+          setOpen({ entry, mode: 'card', enterFrom: null });
         }}
-        onBack={() => {
-          setOpen(null);
+        onSettings={() => {
+          setScreen({ kind: 'settings' });
         }}
       />
-    );
-  }
-  return (
-    <Binder
-      index={index}
-      source={store}
-      notice={notice}
-      progress={progress}
-      offline={!online || networkFailed}
-      with3d={with3d}
-      onOpen={(entry) => {
-        void store.touch(entry);
-        setOpen(entry);
-      }}
-      onSettings={() => {
-        setScreen({ kind: 'settings' });
-      }}
-    />
+      {open && (
+        <CardView
+          key={open.entry.id}
+          source={store}
+          entry={open.entry}
+          initialMode={open.mode}
+          enterFrom={open.enterFrom}
+          hasPrevious={position > 0}
+          hasNext={position >= 0 && position < ordered.length - 1}
+          onNavigate={(direction, mode) => {
+            const target = ordered[position + direction];
+            if (!target) return;
+            void store.touch(target);
+            setOpen({ entry: target, mode, enterFrom: direction > 0 ? 'right' : 'left' });
+          }}
+          onLayersReady={(resolution) => {
+            const entry = open.entry;
+            void store.markLayersComplete(entry, resolution).then(() => update3d(store));
+          }}
+          onBack={() => {
+            setOpen(null);
+          }}
+        />
+      )}
+    </>
   );
 }
 

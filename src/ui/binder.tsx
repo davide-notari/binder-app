@@ -1,11 +1,12 @@
 // Binder (SPEC.md §6 screen 3): thumbnails grouped by section and ordered, promo group first (groupCards keeps
-// the order of index.sections, so moving the promos elsewhere is a change in one place). Badges: immersive flight;
+// the order of index.sections, so moving the promos elsewhere is a change in one place). Badges: immersive card;
 // a cloud on cards whose 3D is not on the device while offline.
 import { useEffect, useState } from 'preact/hooks';
 import { groupCards } from '../data/binder';
 import { cardFilePath, type CardIndex, type CardIndexEntry } from '../data/card-format';
 import type { CardSource } from '../data/source';
-import { CloudIcon, FlightIcon, GearIcon } from './icons';
+import { CloudIcon, GearIcon, ImmersiveIcon } from './icons';
+import { Marquee } from './marquee';
 import { strings } from './strings';
 import './binder.css';
 
@@ -21,9 +22,12 @@ interface Props {
   readonly with3d: ReadonlySet<string>;
   readonly onOpen: (entry: CardIndexEntry) => void;
   readonly onSettings: () => void;
+  /** A card view covers the binder: not reachable by touch, focus or VoiceOver. */
+  readonly covered?: boolean;
 }
 
-export function Binder({ index, source, notice, progress, offline, with3d, onOpen, onSettings }: Props) {
+export function Binder(props: Props) {
+  const { index, source, notice, progress, offline, with3d, onOpen, onSettings, covered = false } = props;
   const [thumbs, setThumbs] = useState<ReadonlyMap<string, string>>(new Map());
 
   useEffect(() => {
@@ -52,7 +56,7 @@ export function Binder({ index, source, notice, progress, offline, with3d, onOpe
 
   const groups = index ? groupCards(index) : null;
   return (
-    <main class="binder">
+    <main class="binder" inert={covered} aria-hidden={covered ? 'true' : undefined}>
       <header class="binder-header">
         <div>
           <h1>{strings.appName}</h1>
@@ -94,12 +98,12 @@ export function Binder({ index, source, notice, progress, offline, with3d, onOpe
                     </span>
                   )}
                   {c.immersive && (
-                    <span class="binder-badge flight" title={strings.immersiveBadgeLabel}>
-                      <FlightIcon />
+                    <span class="binder-badge immersive" title={strings.immersiveBadgeLabel}>
+                      <ImmersiveIcon />
                     </span>
                   )}
                 </span>
-                <span class="binder-name">{c.name}</span>
+                <Marquee class="binder-name" text={c.name} />
               </button>
             ))}
           </div>
