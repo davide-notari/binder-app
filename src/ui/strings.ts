@@ -20,6 +20,8 @@ export const devStrings = {
   renderFrame: (sourceFrame: number) => `f ${sourceFrame}`,
   renderLevels: 'livelli',
   renderHoldReference: 'Tieni premuto: riferimento',
+  renderReferenceBadge: 'RIFERIMENTO',
+  renderReferenceLoading: 'Riferimento in caricamento…',
   renderTapToHide: 'Tocca l’immagine: nascondi/mostra i comandi · tieni premuto: fotogramma di riferimento',
   premultiplyTitle: 'Verifica alpha premoltiplicato',
   premultiplyOk: (texels: number) => `OK: ${texels} texel su ${texels} esatti`,

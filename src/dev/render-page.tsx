@@ -105,6 +105,8 @@ export function RenderPage() {
   const [time, setTime] = useState(params.time);
   const [refs, setRefs] = useState<readonly RefFrame[]>([]);
   const [showRef, setShowRef] = useState(false);
+  /** File name of the reference frame that finished loading (it is preloaded as soon as it is selected). */
+  const [loadedRef, setLoadedRef] = useState<string | null>(null);
   const [info, setInfo] = useState<DevRenderInfo | null>(null);
   const [cssSize, setCssSize] = useState<readonly [number, number] | null>(null);
   const [levels, setLevels] = useState('');
@@ -279,17 +281,29 @@ export function RenderPage() {
           holdRef.current = null;
           setShowRef(false);
         }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+        }}
       >
         <div class="dev-render-frame" style={canvasStyle}>
           <canvas ref={canvasRef} style={canvasStyle} />
-          {showRef && currentRef && card && (
+          {currentRef && card && (
             <img
-              class="dev-render-ref"
+              key={currentRef.file}
+              class={showRef ? 'dev-render-ref visible' : 'dev-render-ref'}
               src={`${import.meta.env.BASE_URL}dev-cards/refs/${card.id}/${currentRef.file}`}
               style={canvasStyle}
               alt=""
               draggable={false}
+              onLoad={() => {
+                setLoadedRef(currentRef.file);
+              }}
             />
+          )}
+          {showRef && currentRef && (
+            <span class="dev-render-badge">
+              {loadedRef === currentRef.file ? devStrings.renderReferenceBadge : devStrings.renderReferenceLoading}
+            </span>
           )}
         </div>
       </div>

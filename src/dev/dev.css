@@ -9,6 +9,10 @@
 
 .dev-render-stage {
   flex: 1;
+  touch-action: none; /* press and hold must not become a scroll or a system gesture on iOS */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -28,6 +32,24 @@
 .dev-render-ref {
   position: absolute;
   inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.dev-render-ref.visible {
+  visibility: visible;
+}
+
+.dev-render-badge {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  background: rgb(0 0 0 / 70%);
+  font-size: 0.75rem;
+  font-weight: 600;
+  pointer-events: none;
 }
 
 .dev-render-panel {
