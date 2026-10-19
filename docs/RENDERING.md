@@ -45,7 +45,7 @@ const gl = canvas.getContext('webgl2', {
 - Check `MAX_TEXTURE_SIZE` against `layer.size`; if any full texture is too big, use half for that card.
 - Opaque layers (`opaque: true`) can be uploaded as `RGB8`/`RGBA8` with alpha 1.
 
-## 2a. Sampling model (M1) — *adopted in M1, awaiting Davide's approval*
+## 2a. Sampling model (M1) — *adopted in M1; Davide accepted it after the iPhone check (2026-10-19)*
 
 The fidelity test (§8) showed that standard GPU filtering cannot meet the thresholds on the real cards:
 
