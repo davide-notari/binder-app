@@ -119,16 +119,21 @@ later: keep the UI layer separate from data and rendering.
    `display-mode: standalone`): short illustrated steps "Condividi → Aggiungi alla schermata Home", then open the app
    from the icon.
 2. **Chiave di accesso** — paste field, "Continua"; errors in plain Italian ("Chiave non valida", "Nessuna connessione").
-3. **Raccoglitore** — grid of thumbnails grouped by `section` and ordered by `order` (CARD_FORMAT.md §2).
-   Promo cards ("Promo", with their printed number such as a date) are kept apart from the regular cards
-   ("Carte"): v1 shows the promo group first, before card 1, with its own small header; keep this placement easy to
-   change (Davide may prefer a separate area). Small badge on cards with immersive; a cloud badge on cards whose 3D
-   is not downloaded (when offline). Tap → card view. Show `number` as text, exactly as given.
+3. **Collezione** (home, M4) — one full-width banner per expansion, newest first: cover (any shape; placeholder
+   when missing), symbol, name, year, number of cards, "N nuove" when new cards arrived. Tap → the expansion's
+   binder. Opens on the collection also when there is a single expansion.
+3b. **Raccoglitore** of an expansion — grid of thumbnails grouped by `section` and ordered by `order`
+   (CARD_FORMAT.md §2). Promo cards ("Promo", with their printed number such as a date) are kept apart from the
+   regular cards ("Carte"), on top. Next to the number: rarity symbol, immersive badge, and a cloud badge on cards
+   whose 3D is not downloaded (when offline). Tap → card view. Show `number` as text, exactly as given. Back to the
+   collection with the back button or a swipe from the left edge that reveals the collection underneath.
 4. **Carta** (card view), with a mode button **Carta / Artwork**:
    - *Carta*: `front.webp` (or the artwork if missing), fitted to the screen.
    - *Artwork*: the WebGL view in the card's aspect, rounded corners; button **3D** (on/off).
      With 3D off and an immersive card, a hint icon "Tieni premuto" is visible; long press starts the immersive.
-   - Back to the binder with a back button / edge swipe. (Swipe between cards: later, optional.)
+   - Back to the binder with a back button / edge swipe (the view follows the finger and reveals the binder).
+   - Horizontal swipe inside the card: previous / next card of the same expansion, keeping Carta or Artwork.
+   - Header: name (scrolls when too long), number, rarity symbol and name.
 5. **Impostazioni** — cache, downloads, key, app version, debug toggle.
 
 ### Card view state machine

@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "cards": [
+    {
+      "id": "testcard-promo",
+      "name": "Promo di prova",
+      "number": "10-05-2026",
+      "section": "promo",
+      "order": 20260510,
+      "version": "12ce6a1d474c",
+      "path": "cards/testcard-promo.card",
+      "immersive": false,
+      "hasFront": false,
+      "bytes": {
+        "base": 222415,
+        "full": 27200,
+        "half": 23878
+      }
+    },
+    {
+      "id": "testcard",
+      "name": "Carta di prova",
+      "number": "1",
+      "section": "main",
+      "order": 1,
+      "version": "d5551aea8dea",
+      "path": "cards/testcard.card",
+      "immersive": true,
+      "hasFront": true,
+      "bytes": {
+        "base": 251893,
+        "full": 27200,
+        "half": 23878
+      }
+    }
+  ],
+  "sections": [
+    "promo",
+    "main"
+  ]
+}

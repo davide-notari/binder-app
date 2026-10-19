@@ -1,10 +1,54 @@
 // Binder grid and settings (SPEC.md §5–6), on the mocked GitHub source (see github.spec.ts) where needed.
 import { expect, test } from '@playwright/test';
+import { openSet } from './helpers';
+
+test('collection: newest expansion first, cover or placeholder, year and card count', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Raccoglitore' })).toBeVisible();
+  await expect(page.getByText('2 espansioni')).toBeVisible();
+  const order = await page
+    .locator('.collection-tile')
+    .evaluateAll((tiles) => tiles.map((t) => t.getAttribute('data-set')));
+  expect(order).toEqual(['seconda-espansione', 'espansione-prova']); // newest (highest order) first
+  // the first expansion has a cover, the second a placeholder; year only when set
+  await expect(page.locator('[data-set="espansione-prova"] .collection-cover img')).toHaveCount(1);
+  await expect(page.locator('[data-set="seconda-espansione"] .collection-placeholder')).toHaveCount(1);
+  await expect(page.locator('[data-set="espansione-prova"] .collection-year')).toHaveText('2026');
+  await expect(page.locator('[data-set="seconda-espansione"] .collection-year')).toHaveCount(0);
+  await expect(page.locator('[data-set="espansione-prova"] .collection-meta')).toHaveText('2 carte');
+});
+
+test('binder: back to the collection with the button or a swipe from the edge', async ({ page }) => {
+  await page.goto('/');
+  await openSet(page);
+  await page.getByRole('button', { name: /Indietro/ }).click();
+  await expect(page.locator('.binder')).toHaveCount(0);
+  await openSet(page, 'seconda-espansione');
+  await expect(page.locator('.binder-card')).toHaveCount(1); // only the cards of this expansion
+  const height = page.viewportSize()!.height;
+  await page.mouse.move(4, height / 2);
+  await page.mouse.down();
+  await page.mouse.move(90, height / 2 + 3, { steps: 6 });
+  await page.mouse.move(180, height / 2 + 5, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.locator('.binder')).toHaveCount(0);
+});
+
+test('rarity: symbol in the binder, symbol and name in the card view, nothing without rarity', async ({ page }) => {
+  await page.goto('/');
+  await openSet(page);
+  await expect(page.locator('[data-card="testcard"] .binder-rarity')).toHaveAttribute('alt', 'Rara');
+  await expect(page.locator('[data-card="testcard-promo"] .binder-rarity')).toHaveCount(0);
+  await page.click('[data-card="testcard"]');
+  await expect(page.locator('.card-view-rarity')).toHaveText('Rara');
+  await expect(page.locator('.card-view-rarity img')).toHaveCount(1);
+});
 
 test('binder: promo section first, numbers as printed, immersive badge on immersive cards', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Raccoglitore' })).toBeVisible();
-  await expect(page.getByText('2 carte')).toBeVisible();
+  await openSet(page);
+  await expect(page.locator('.binder-title')).toHaveText('Espansione di prova');
+  await expect(page.getByText('2026 · 2 carte')).toBeVisible();
   await expect(page.locator('.binder-section h2')).toHaveText(['Promo', 'Carte']);
   await expect(page.locator('.binder-card .binder-number')).toHaveText(['10-05-2026', '1']);
   await expect(page.locator('[data-card="testcard"] .binder-badge.immersive')).toHaveCount(1);
@@ -14,6 +58,7 @@ test('binder: promo section first, numbers as printed, immersive badge on immers
 
 test('card view: a swipe from the left edge goes back to the binder', async ({ page }) => {
   await page.goto('/');
+  await openSet(page);
   await page.click('[data-card="testcard"]');
   await expect(page.locator('.card-view')).toBeVisible();
   await page.waitForTimeout(400); // the view has finished sliding in
@@ -38,6 +83,7 @@ test('card view: swiping inside the card goes to the next / previous card, with 
   page,
 }) => {
   await page.goto('/');
+  await openSet(page);
   await page.click('[data-card="testcard-promo"]'); // first card (promo section)
   await expect(page.locator('.card-view-name')).toHaveText('Promo di prova');
   await page.waitForTimeout(400); // the view has finished sliding in
@@ -59,6 +105,7 @@ test('card view: swiping inside the card goes to the next / previous card, with 
 
 test('card view: a short pull from the edge springs back', async ({ page }) => {
   await page.goto('/');
+  await openSet(page);
   await page.click('[data-card="testcard"]');
   await page.waitForTimeout(400); // the view has finished sliding in
   const height = page.viewportSize()!.height;
@@ -79,6 +126,7 @@ test('long names scroll to show all of them', async ({ page }) => {
     await route.fulfill({ response, json: index });
   });
   await page.goto('/');
+  await openSet(page);
   await expect(page.locator('[data-card="testcard"] .marquee.overflowing')).toHaveCount(1);
   await expect(page.locator('[data-card="testcard-promo"] .marquee.overflowing')).toHaveCount(0);
   await page.click('[data-card="testcard"]');
@@ -89,6 +137,7 @@ test('settings: 3D space, clear, limit, download all, debug switch', async ({ pa
   page.on('dialog', (dialog) => void dialog.accept());
   await page.goto('/');
   // open the 3D of one card, so there is something in the cache
+  await openSet(page);
   await page.click('[data-card="testcard"]');
   await page.getByRole('button', { name: 'Artwork' }).click();
   await expect(page.locator('.card-view')).toHaveAttribute('data-ready', '1', { timeout: 30_000 });
@@ -111,7 +160,7 @@ test('settings: 3D space, clear, limit, download all, debug switch', async ({ pa
   const layers = await page.evaluate(
     async () => (await (await caches.open('binder-cards-v1')).keys()).filter((r) => r.url.includes('/layers/')).length,
   );
-  expect(layers).toBe(12); // 6 layers × 2 cards
+  expect(layers).toBe(18); // 6 layers × 3 cards (every expansion)
 
   await expect(page.locator('.debug-chip')).toHaveCount(0);
   await page.getByText('Pannello di debug').click();

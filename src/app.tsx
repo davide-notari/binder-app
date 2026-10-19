@@ -1,6 +1,6 @@
 import type { FunctionComponent } from 'preact';
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
-import { groupCards } from './data/binder';
+import { binderSequence } from './data/binder';
 import { CardFormatError, type CardIndex, type CardIndexEntry } from './data/card-format';
 import { GitHubSource } from './data/github-source';
 import { clearToken, getToken, setToken } from './data/settings';
@@ -10,6 +10,7 @@ import { debugEnabled, reportDebugError, setDebugEnabled, setDebugValue } from '
 import { DebugOverlay } from './debug/overlay';
 import { recoverAfterCrash } from './render/gpu-limit';
 import { Binder } from './ui/binder';
+import { Collection } from './ui/collection';
 import { CardView } from './ui/card-view';
 import { InstallScreen } from './ui/screens/install-screen';
 import { KeyScreen, type KeyProblem } from './ui/screens/key-screen';
@@ -105,7 +106,7 @@ function useOnline(): boolean {
 }
 
 interface OpenCard {
-  readonly entry: CardIndexEntry;
+  readonly id: string;
   readonly mode: 'card' | 'artwork-flat';
   readonly enterFrom: 'left' | 'right' | null;
 }
@@ -124,6 +125,10 @@ function AppFlow({ debugOn, onDebugChange }: FlowProps) {
   const [progress, setProgress] = useState<readonly [number, number] | null>(null);
   const [networkFailed, setNetworkFailed] = useState(false);
   const [with3d, setWith3d] = useState<ReadonlySet<string>>(new Set());
+  /** Expansion whose binder is open (over the collection). */
+  const [openSet, setOpenSet] = useState<string | null>(null);
+  /** Cards that arrived with a refresh, for the "N nuove" badge of their expansion (cleared when it is opened). */
+  const [newIds, setNewIds] = useState<ReadonlySet<string>>(new Set());
   const online = useOnline();
   const started = useRef(false);
   const local = import.meta.env.DEV && usesLocalSource();
@@ -149,6 +154,7 @@ function AppFlow({ debugOn, onDebugChange }: FlowProps) {
         setNetworkFailed(false);
         message = result.newCards > 0 ? strings.newCards(result.newCards) : strings.settingsUpToDate;
         setNotice(result.newCards > 0 ? message : null);
+        if (result.newCardIds.length > 0) setNewIds((old) => new Set([...old, ...result.newCardIds]));
       } catch (error) {
         setDebugValue('index', error instanceof SourceError ? `errore: ${error.kind}` : 'errore');
         if (error instanceof SourceError && (error.kind === 'unauthorized' || error.kind === 'not-found') && !local) {
@@ -294,45 +300,75 @@ function AppFlow({ debugOn, onDebugChange }: FlowProps) {
       />
     );
   }
-  // the binder stays mounted under the card view: going back reveals it (and keeps its scroll position)
-  const ordered = index ? groupCards(index).flatMap((g) => g.cards) : [];
-  const position = open ? ordered.findIndex((c) => c.id === open.entry.id) : -1;
+  // stacked screens: the collection stays mounted under the binder, the binder under the card view; going back
+  // reveals the screen underneath (and keeps its scroll position)
+  const set = index && openSet !== null ? (index.sets.find((x) => x.id === openSet) ?? null) : null;
+  const sequence = index && set ? binderSequence(index, set.id) : [];
+  // descriptive data may change with a refreshed index: the open card is looked up again by id
+  const openEntry = open ? (index?.cards.find((c) => c.id === open.id) ?? null) : null;
+  const position = openEntry ? sequence.findIndex((c) => c.id === openEntry.id) : -1;
+  const rarityOf = (entry: CardIndexEntry) =>
+    entry.rarity ? (index?.rarities.find((r) => r.id === entry.rarity) ?? null) : null;
+  const offline = !online || networkFailed;
   return (
     <>
-      <Binder
+      <Collection
         index={index}
         source={store}
-        notice={notice}
+        notice={set ? null : notice}
         progress={progress}
-        offline={!online || networkFailed}
-        with3d={with3d}
-        covered={open !== null}
-        onOpen={(entry) => {
-          void store.touch(entry);
-          setOpen({ entry, mode: 'card', enterFrom: null });
+        newIds={newIds}
+        covered={set !== null}
+        onOpenSet={(target) => {
+          setOpenSet(target.id);
+          setNewIds(
+            (old) => new Set([...old].filter((id) => !index?.cards.some((c) => c.id === id && c.set === target.id))),
+          );
         }}
         onSettings={() => {
           setScreen({ kind: 'settings' });
         }}
       />
-      {open && (
-        <CardView
-          key={open.entry.id}
+      {index && set && (
+        <Binder
+          key={set.id}
+          index={index}
+          set={set}
           source={store}
-          entry={open.entry}
-          initialMode={open.mode}
-          enterFrom={open.enterFrom}
+          notice={notice}
+          offline={offline}
+          with3d={with3d}
+          covered={openEntry !== null}
+          onOpen={(entry) => {
+            void store.touch(entry);
+            setOpen({ id: entry.id, mode: 'card', enterFrom: null });
+          }}
+          onSettings={() => {
+            setScreen({ kind: 'settings' });
+          }}
+          onBack={() => {
+            setOpenSet(null);
+          }}
+        />
+      )}
+      {openEntry && (
+        <CardView
+          key={openEntry.id}
+          source={store}
+          entry={openEntry}
+          rarity={rarityOf(openEntry)}
+          initialMode={open?.mode ?? 'card'}
+          enterFrom={open?.enterFrom ?? null}
           hasPrevious={position > 0}
-          hasNext={position >= 0 && position < ordered.length - 1}
+          hasNext={position >= 0 && position < sequence.length - 1}
           onNavigate={(direction, mode) => {
-            const target = ordered[position + direction];
+            const target = sequence[position + direction];
             if (!target) return;
             void store.touch(target);
-            setOpen({ entry: target, mode, enterFrom: direction > 0 ? 'right' : 'left' });
+            setOpen({ id: target.id, mode, enterFrom: direction > 0 ? 'right' : 'left' });
           }}
           onLayersReady={(resolution) => {
-            const entry = open.entry;
-            void store.markLayersComplete(entry, resolution).then(() => update3d(store));
+            void store.markLayersComplete(openEntry, resolution).then(() => update3d(store));
           }}
           onBack={() => {
             setOpen(null);

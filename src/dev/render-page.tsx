@@ -314,7 +314,7 @@ export function RenderPage() {
           {ready && card && info && (
             <>
               <p>
-                {card.name} · {params.resolution} · {info.widthPx}×{info.heightPx} px · {formatMb(info.textureBytes)} ·{' '}
+                {card.id} · {params.resolution} · {info.widthPx}×{info.heightPx} px · {formatMb(info.textureBytes)} ·{' '}
                 {info.loadMs} ms
               </p>
               <p>

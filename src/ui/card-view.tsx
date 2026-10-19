@@ -6,6 +6,7 @@ import {
   type Card,
   type CardIndexEntry,
   type CardLayer,
+  type Rarity,
   type TextureResolution,
 } from '../data/card-format';
 import { fetchCard, SourceError, type CardSource } from '../data/source';
@@ -18,6 +19,7 @@ import { useCardGestures } from './card-gestures';
 import { ChevronLeftIcon } from './icons';
 import { Marquee } from './marquee';
 import { strings } from './strings';
+import { useImageUrls } from './use-images';
 import './card-view.css';
 
 interface Props {
@@ -34,6 +36,8 @@ interface Props {
   readonly initialMode?: 'card' | 'artwork-flat';
   /** Set when the view replaces another card: the card slides in from that side. */
   readonly enterFrom?: 'left' | 'right' | null;
+  /** The card's rarity (null = none). */
+  readonly rarity?: Rarity | null;
 }
 
 interface Box {
@@ -87,7 +91,9 @@ function layerFetcher(source: CardSource, cardPath: string, card: Card): LayerFe
 
 export function CardView(props: Props) {
   const { source, entry, onBack, onLayersReady, hasPrevious = false, hasNext = false } = props;
-  const { onNavigate, initialMode = 'card', enterFrom = null } = props;
+  const { onNavigate, initialMode = 'card', enterFrom = null, rarity = null } = props;
+  const rarityImages = useImageUrls(source, [rarity?.symbol ?? null]);
+  const raritySymbol = rarity?.symbol ? rarityImages.get(rarity.symbol.path) : undefined;
   const [card, setCard] = useState<Card | null>(null);
   const [failed, setFailed] = useState(false);
   const [mode, setMode] = useState<CardMode>(initialMode);
@@ -256,6 +262,7 @@ export function CardView(props: Props) {
   const gestures = useCardGestures({
     rootRef,
     stageRef,
+    revealVar: '--back-progress',
     enabled: mode !== 'immersive',
     hasPrevious,
     hasNext,
@@ -309,7 +316,15 @@ export function CardView(props: Props) {
         </button>
         <div class="card-view-title">
           <Marquee class="card-view-name" text={entry.name} />
-          <span class="card-view-number">{entry.number}</span>
+          <span class="card-view-meta">
+            {entry.number && <span class="card-view-number">{entry.number}</span>}
+            {rarity && (
+              <span class="card-view-rarity">
+                {raritySymbol && <img src={raritySymbol} alt="" draggable={false} />}
+                {rarity.name}
+              </span>
+            )}
+          </span>
         </div>
       </header>
 

@@ -3,13 +3,13 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 
 const cardsDir = path.resolve(process.env.CARDS_DIR ?? 'tests/fixtures/cards-repo');
-const index = JSON.parse(readFileSync(path.join(cardsDir, 'index.json'), 'utf8')) as { cards: unknown[] };
+const index = JSON.parse(readFileSync(path.join(cardsDir, 'index.json'), 'utf8')) as { sets?: unknown[] };
 
-test('development home lists the local cards', async ({ page }) => {
+test('development home shows the collection of the local cards', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveTitle('Raccoglitore');
   await expect(page.getByRole('heading', { name: 'Raccoglitore' })).toBeVisible();
-  await expect(page.locator('.binder-card')).toHaveCount(index.cards.length);
+  await expect(page.locator('.collection-tile')).toHaveCount(index.sets?.length ?? 1);
 });
 
 test('dev server serves the local card repository', async ({ request }) => {
@@ -17,7 +17,7 @@ test('dev server serves the local card repository', async ({ request }) => {
   expect(response.status()).toBe(200);
   expect(response.headers()['content-type']).toContain('application/json');
   const json = (await response.json()) as { schema: number; cards: unknown[] };
-  expect(json.schema).toBe(1);
+  expect([1, 2]).toContain(json.schema);
   expect(json.cards.length).toBeGreaterThan(0);
 });
 

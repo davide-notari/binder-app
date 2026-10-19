@@ -1,6 +1,7 @@
 // Card view (SPEC.md §6, RENDERING.md §5): modes, 3D tilt without jumps, immersive flight back to home,
 // repeated opening of cards on the shared WebGL context.
 import { expect, test, type Page } from '@playwright/test';
+import { openSet } from './helpers';
 
 declare global {
   interface Window {
@@ -17,6 +18,7 @@ const pixels = (page: Page) => page.evaluate(() => window.__binderCard!.renderBa
 const mode = (page: Page) => page.evaluate(() => window.__binderCard!.mode());
 
 async function openArtwork(page: Page, cardId: string): Promise<void> {
+  if ((await page.locator('.binder').count()) === 0) await openSet(page);
   await page.click(`[data-card="${cardId}"]`);
   await expect(page.locator('.card-view')).toHaveAttribute('data-mode', 'card');
   await page.getByRole('button', { name: 'Artwork' }).click();
@@ -82,6 +84,7 @@ test('back to Carta after the 3D is ready shows the front image, not the WebGL v
 
 test('the card mode shows the front image, or the artwork when the card has none', async ({ page }) => {
   await page.goto('/');
+  await openSet(page);
   await page.click('[data-card="testcard"]');
   await expect(page.locator('.card-front')).toHaveAttribute('alt', 'Carta di prova');
   await page.getByRole('button', { name: /Indietro/ }).click();

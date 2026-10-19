@@ -5,6 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test as base, devices, expect, webkit, type Page } from '@playwright/test';
+import { openSet } from './helpers';
 
 // Playwright's default (ephemeral) WebKit contexts lose the Cache API on reload, unlike Safari on the iPhone:
 // these tests run in a persistent profile so that "reopen the app" behaves like the real device.
@@ -56,8 +57,8 @@ async function mockGitHub(page: Page, state: MockState): Promise<void> {
       record(401);
       return route.fulfill({ status: 401, headers: cors, body: '{"message":"Bad credentials"}' });
     }
-    // "testcard-bis" (added by a test) is served with the files of testcard
-    const local = path.join(FIXTURES, file.replace(/^cards\/testcard-bis\.card\//, 'cards/testcard.card/'));
+    // "testcard-ter" (added by a test) is served with the files of testcard
+    const local = path.join(FIXTURES, file.replace(/^cards\/testcard-ter\.card\//, 'cards/testcard.card/'));
     const body = state.overrides.get(file) ?? (existsSync(local) ? readFileSync(local) : null);
     if (!match || url.searchParams.get('ref') !== 'main' || state.noAccess || !body) {
       record(404);
@@ -90,13 +91,16 @@ function cachedFiles(page: Page): Promise<string[]> {
   });
 }
 
+/** Base files of the fixture: 3 cards (the promo card has no front image) + cover and 2 symbols. */
+const BASE_FILES = 4 + 3 + 4 + 3;
+
 async function onboard(page: Page): Promise<void> {
   await page.goto(APP);
   await expect(page.getByRole('heading', { name: 'Chiave di accesso' })).toBeVisible();
   await enterKey(page, TOKEN);
-  await expect(page.locator('.binder-card')).toHaveCount(2);
-  // base files of both cards (testcard has a front image, the promo card has none)
-  await expect.poll(() => cachedFiles(page).then((f) => f.length), { message: 'base files' }).toBe(7);
+  await expect(page.locator('.collection-tile')).toHaveCount(2);
+  await expect.poll(() => cachedFiles(page).then((f) => f.length), { message: 'base files' }).toBe(BASE_FILES);
+  await openSet(page);
 }
 
 test('key screen: wrong key, then the right one; next start uses the cache and a conditional request', async ({
@@ -113,14 +117,16 @@ test('key screen: wrong key, then the right one; next start uses the cache and a
   await enterKey(page, 'github_pat_wrong');
   await expect(page.getByRole('alert')).toHaveText('Chiave non valida. Controlla di averla copiata tutta.');
   await enterKey(page, TOKEN);
-  await expect(page.locator('.binder-card')).toHaveCount(2);
-  await expect.poll(() => cachedFiles(page).then((f) => f.length)).toBe(7);
+  await expect(page.locator('.collection-tile')).toHaveCount(2);
+  await expect.poll(() => cachedFiles(page).then((f) => f.length)).toBe(BASE_FILES);
 
   const indexEtag = `"${createHash('sha1')
     .update(readFileSync(path.join(FIXTURES, 'index.json')))
     .digest('hex')}"`;
   state.requests = [];
   await page.reload();
+  await expect(page.locator('.collection-cover img')).toHaveCount(1); // the cover, from the cache
+  await openSet(page);
   await expect(page.locator('.binder-thumb img')).toHaveCount(2);
   await expect.poll(() => state.requests.find((r) => r.path === 'index.json')?.ifNoneMatch).toBe(indexEtag);
   expect(state.requests.filter((r) => r.path !== 'index.json').map((r) => r.path)).toEqual([]); // all from the cache
@@ -134,18 +140,19 @@ test('a re-exported card replaces its cached files; new cards are announced', as
   const state = newState();
   await mockGitHub(page, state);
   await onboard(page);
-  expect((await cachedFiles(page)).filter((f) => f.startsWith('testcard/d5551aea8dea/'))).toHaveLength(4);
-
   const index = JSON.parse(readFileSync(path.join(FIXTURES, 'index.json'), 'utf8')) as {
     cards: { id: string; version: string; path: string }[];
   };
   const testcard = index.cards.find((c) => c.id === 'testcard')!;
+  expect((await cachedFiles(page)).filter((f) => f.startsWith(`testcard/${testcard.version}/`))).toHaveLength(4);
   testcard.version = 'aaaaaaaaaaaa';
-  index.cards.push({ ...testcard, id: 'testcard-bis', path: 'cards/testcard-bis.card', version: 'bbbbbbbbbbbb' });
+  index.cards.push({ ...testcard, id: 'testcard-ter', path: 'cards/testcard-ter.card', version: 'bbbbbbbbbbbb' });
   state.overrides.set('index.json', Buffer.from(JSON.stringify(index)));
 
   await page.reload();
   await expect(page.getByText('1 carta nuova')).toBeVisible();
+  await expect(page.locator('[data-set="espansione-prova"] .collection-new')).toHaveText(' · 1 nuova');
+  await openSet(page);
   await expect(page.locator('.binder-card')).toHaveCount(3);
   await expect
     .poll(async () => (await cachedFiles(page)).filter((f) => f.startsWith('testcard/')).sort())
@@ -169,6 +176,8 @@ test('offline: the binder and cached cards still work; uncached 3D asks for the 
   state.offline = true;
   await page.reload();
   await expect(page.getByText('Sei offline: vedi le carte salvate su questo iPhone.')).toBeVisible();
+  await expect(page.locator('.collection-cover img')).toHaveCount(1); // cover from the cache
+  await openSet(page);
   await expect(page.locator('.binder-thumb img')).toHaveCount(2); // thumbnails from the cache
 
   await page.click('[data-card="testcard"]');
@@ -196,6 +205,7 @@ test('offline: a cloud badge marks the cards whose 3D is not on the phone', asyn
   state.offline = true;
   await page.reload();
   await expect(page.getByText('Sei offline: vedi le carte salvate su questo iPhone.')).toBeVisible();
+  await openSet(page);
   await expect(page.locator('[data-card="testcard-promo"] .binder-badge.cloud')).toHaveCount(1);
   await expect(page.locator('[data-card="testcard"] .binder-badge.cloud')).toHaveCount(0);
 });
@@ -214,7 +224,7 @@ test('settings: replace the key (or cancel), remove the key', async ({ page }) =
 
   await page.getByRole('button', { name: 'Sostituisci chiave' }).click();
   await enterKey(page, TOKEN);
-  await expect(page.locator('.binder-card')).toHaveCount(2);
+  await expect(page.locator('.collection-tile')).toHaveCount(2);
 
   await page.getByRole('button', { name: 'Impostazioni' }).click();
   await page.getByRole('button', { name: 'Rimuovi chiave' }).click();

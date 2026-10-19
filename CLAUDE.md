@@ -61,6 +61,8 @@ npm run test:pwa                build + offline app shell test (Chromium: Playwr
 CARDS_DIR=../binder-cards npm run test:e2e   same tests on the real cards (local only, nothing copied)
 FIDELITY_SAVE=1 npx playwright test tests/e2e/fidelity.spec.ts   also save side-by-side + heatmap of passing frames
 python3 tools/make_premultiply_fixture.py   regenerate src/dev/premultiply-fixture.ts (needs pillow, numpy)
+python3 tools/make_schema2_fixture.py       regenerate tests/fixtures/cards-repo (schema 2) from cards-repo-v1 with
+                                            the exporter's own tools in ../binder-cards/tools (read only)
 ```
 - WebKit tests: fidelity (RENDERING.md §8, every reference frame of every card with `refs/`), premultiplied
   upload, context loss/restore, smoke. Comparison images go to `test-results/` (git-ignored, wiped every run).

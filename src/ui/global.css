@@ -85,3 +85,31 @@ body {
 button:disabled {
   opacity: 0.4;
 }
+
+/* a screen opening over another one slides in from the right */
+@keyframes screen-push-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+/* back button of the screens (chevron + Indietro) */
+.bar-back {
+  position: absolute;
+  left: -0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  min-height: 44px;
+  padding: 0 0.5rem 0 0.25rem;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.bar-back .icon {
+  width: 22px;
+  height: 22px;
+}

@@ -1,11 +1,13 @@
 .binder {
-  position: relative;
-  box-sizing: border-box;
-  min-height: 100%;
-  /* --back-progress (card-gestures.ts): 1 = binder in view, 0 = covered by a card (shifted left and dimmed) */
+  z-index: 3;
+  touch-action: pan-y; /* vertical scrolling; horizontal moves from the edge go back (card-gestures.ts) */
+  box-shadow: -10px 0 28px rgb(0 0 0 / 45%);
+  /* --back-progress: 1 = binder in view, 0 = covered by a card (shifted left and dimmed) */
   transform: translateX(calc(-22% * (1 - var(--back-progress, 1))));
-  padding: 0 1rem 2.5rem;
-  background: radial-gradient(120% 60% at 50% 0%, #1d1d22 0%, var(--bg) 70%);
+}
+
+.binder.push-in {
+  animation: screen-push-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .binder::after {
@@ -24,10 +26,49 @@
     opacity 230ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+.screen-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+  padding-top: 0.5rem;
+}
+
+.screen-topbar .bar-back {
+  position: static;
+  margin-left: -0.5rem;
+}
+
+.binder-heading {
+  min-width: 0;
+}
+
+.binder-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.binder-set-symbol {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.binder-rarity {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
 .binder-header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+  gap: 1rem;
   padding: 1.25rem 0 0.75rem;
 }
 
@@ -60,7 +101,7 @@
   color: var(--fg);
 }
 
-.binder .banner {
+.screen-scroll .banner {
   width: 100%;
   margin: 0.25rem 0 0.5rem;
 }

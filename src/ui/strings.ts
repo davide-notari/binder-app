@@ -42,6 +42,12 @@ export const strings = {
   offline3d: 'Serve la connessione per scaricare il 3D.',
   updateAvailable: 'Nuova versione disponibile — tocca per aggiornare',
   cardCount: (n: number) => (n === 1 ? '1 carta' : `${n} carte`),
+  newInSet: (n: number) => (n === 1 ? '1 nuova' : `${n} nuove`),
+  /** A schema 1 catalog has no expansions: its cards are shown as one unnamed expansion. */
+  implicitSetName: 'Le carte',
+  expansionCount: (n: number) => (n === 1 ? '1 espansione' : `${n} espansioni`),
+  noExpansions: 'Nessuna espansione per ora.',
+  emptySet: 'Questa espansione non ha ancora carte.',
   settings: 'Impostazioni',
   immersiveBadgeLabel: 'Carta immersiva',
   cloudBadgeLabel: '3D non scaricato',

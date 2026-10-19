@@ -1,7 +1,11 @@
-// Types and validation for the card data contract (docs/CARD_FORMAT.md, schema 1).
-// Parsing is fail-closed: anything that does not match the contract throws CardFormatError.
+// Types and validation for the card data contract (docs/CARD_FORMAT.md, schemas 1 and 2).
+// Parsing is fail-closed: anything that does not match the contract throws CardFormatError. Unknown keys are
+// ignored (new optional fields do not bump the schema).
 
-export const SUPPORTED_SCHEMA = 1;
+/** Schemas this app reads. Schema 1 data can still be in a device's cache during the transition. */
+export const SUPPORTED_SCHEMAS: readonly number[] = [1, 2];
+/** The single expansion a schema 1 index is shown as (no name, year, cover or rarities). */
+export const IMPLICIT_SET_ID = '';
 
 export type Vec3 = readonly [number, number, number];
 /** Unit quaternion [x, y, z, w]. */
@@ -14,12 +18,40 @@ export type Wrap = 'clamp' | 'mirror';
 export type TextureResolution = 'full' | 'half';
 export type Row4 = readonly [number, number, number, number];
 
+/** An image of the catalog (expansion cover or symbol, rarity symbol); any shape, laid out with its size. */
+export interface ImageRef {
+  readonly path: string;
+  readonly size: Size;
+  /** Content hash: changes when the image changes. */
+  readonly version: string;
+}
+
+export interface CardSet {
+  readonly id: string;
+  readonly name: string;
+  readonly order: number;
+  readonly year: number | null;
+  readonly cover: ImageRef | null;
+  readonly symbol: ImageRef | null;
+}
+
+export interface Rarity {
+  readonly id: string;
+  readonly name: string;
+  readonly order: number;
+  readonly symbol: ImageRef | null;
+}
+
+/** A card in the catalog: all its descriptive data (card.json holds only rendering data). */
 export interface CardIndexEntry {
   readonly id: string;
   readonly name: string;
   readonly number: string;
+  /** Expansion id (IMPLICIT_SET_ID for schema 1). */
+  readonly set: string;
   readonly section: string;
   readonly order: number;
+  readonly rarity: string | null;
   readonly version: string;
   readonly path: string;
   readonly immersive: boolean;
@@ -29,6 +61,8 @@ export interface CardIndexEntry {
 
 export interface CardIndex {
   readonly schema: number;
+  readonly sets: readonly CardSet[];
+  readonly rarities: readonly Rarity[];
   readonly sections: readonly string[];
   readonly cards: readonly CardIndexEntry[];
 }
@@ -88,13 +122,10 @@ export interface ImmersiveTrack {
   readonly poses: readonly Pose[];
 }
 
+/** card.json: rendering data only. Name, number, section and order come from the index entry. */
 export interface Card {
   readonly schema: number;
   readonly id: string;
-  readonly name: string;
-  readonly number: string;
-  readonly section: string;
-  readonly order: number;
   readonly version: string;
   readonly artPx: Size;
   readonly pxPerUnit: number;
@@ -186,15 +217,92 @@ function fileName(value: unknown, path: string): string {
 
 function checkSchema(root: Obj, what: string): number {
   const schema = int(root.schema, `${what}.schema`);
-  if (schema !== SUPPORTED_SCHEMA) {
-    throw new CardFormatError('unsupported-schema', `${what}: schema ${schema}, supported ${SUPPORTED_SCHEMA}`);
+  if (!SUPPORTED_SCHEMAS.includes(schema)) {
+    throw new CardFormatError(
+      'unsupported-schema',
+      `${what}: schema ${schema}, supported ${SUPPORTED_SCHEMAS.join(', ')}`,
+    );
   }
   return schema;
+}
+
+function id(value: unknown, path: string): string {
+  const v = str(value, path);
+  if (!ID_PATTERN.test(v)) invalid(path, 'lowercase a-z, 0-9 and "-"');
+  return v;
+}
+
+function nullableInt(value: unknown, path: string): number | null {
+  return value === null || value === undefined ? null : int(value, path);
+}
+
+/** A catalog image at exactly the expected path (no other files can be reached through the data). */
+function imageRef(value: unknown, path: string, expectedPath: string): ImageRef | null {
+  if (value === null || value === undefined) return null;
+  const v = obj(value, path);
+  if (v.path !== expectedPath) invalid(`${path}.path`, `"${expectedPath}"`);
+  const version = str(v.version, `${path}.version`);
+  if (!/^[0-9a-f]{12}$/.test(version)) invalid(`${path}.version`, 'a 12-digit hex hash');
+  return { path: expectedPath, size: size(v.size, `${path}.size`), version };
 }
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 // ---------------------------------------------------------------- index.json
+
+function parseEntry(value: unknown, p: string, schema: number): CardIndexEntry {
+  const c = obj(value, p);
+  const cardId = id(c.id, `${p}.id`);
+  const path = str(c.path, `${p}.path`);
+  if (path !== `cards/${cardId}.card`) invalid(`${p}.path`, `"cards/${cardId}.card"`);
+  const bytes = obj(c.bytes, `${p}.bytes`);
+  return {
+    id: cardId,
+    name: str(c.name, `${p}.name`),
+    number: str(c.number, `${p}.number`),
+    set: schema === 1 ? IMPLICIT_SET_ID : id(c.set, `${p}.set`),
+    section: str(c.section, `${p}.section`),
+    order: num(c.order, `${p}.order`),
+    rarity: schema === 1 || c.rarity === null || c.rarity === undefined ? null : id(c.rarity, `${p}.rarity`),
+    version: str(c.version, `${p}.version`),
+    path,
+    immersive: bool(c.immersive, `${p}.immersive`),
+    hasFront: bool(c.hasFront, `${p}.hasFront`),
+    bytes: {
+      base: num(bytes.base, `${p}.bytes.base`),
+      full: num(bytes.full, `${p}.bytes.full`),
+      half: num(bytes.half, `${p}.bytes.half`),
+    },
+  };
+}
+
+function parseSet(value: unknown, p: string): CardSet {
+  const s = obj(value, p);
+  const setId = id(s.id, `${p}.id`);
+  return {
+    id: setId,
+    name: str(s.name, `${p}.name`),
+    order: num(s.order, `${p}.order`),
+    year: nullableInt(s.year, `${p}.year`),
+    cover: imageRef(s.cover, `${p}.cover`, `sets/${setId}/cover.webp`),
+    symbol: imageRef(s.symbol, `${p}.symbol`, `sets/${setId}/symbol.webp`),
+  };
+}
+
+function parseRarity(value: unknown, p: string): Rarity {
+  const r = obj(value, p);
+  const rarityId = id(r.id, `${p}.id`);
+  return {
+    id: rarityId,
+    name: str(r.name, `${p}.name`),
+    order: num(r.order, `${p}.order`),
+    symbol: imageRef(r.symbol, `${p}.symbol`, `rarities/${rarityId}/symbol.webp`),
+  };
+}
+
+function unique(ids: readonly string[], path: string): void {
+  if (new Set(ids).size !== ids.length) invalid(path, 'unique ids');
+}
 
 export function parseCardIndex(json: unknown): CardIndex {
   const root = obj(json, 'index');
@@ -203,32 +311,32 @@ export function parseCardIndex(json: unknown): CardIndex {
     root.sections === undefined
       ? []
       : arr(root.sections, 'index.sections').map((s, i) => str(s, `index.sections[${i}]`));
-  const cards = arr(root.cards, 'index.cards').map((value, i): CardIndexEntry => {
-    const p = `index.cards[${i}]`;
-    const c = obj(value, p);
-    const id = str(c.id, `${p}.id`);
-    if (!ID_PATTERN.test(id)) invalid(`${p}.id`, 'lowercase a-z, 0-9 and "-"');
-    const path = str(c.path, `${p}.path`);
-    if (path !== `cards/${id}.card`) invalid(`${p}.path`, `"cards/${id}.card"`);
-    const bytes = obj(c.bytes, `${p}.bytes`);
-    return {
-      id,
-      name: str(c.name, `${p}.name`),
-      number: str(c.number, `${p}.number`),
-      section: str(c.section, `${p}.section`),
-      order: num(c.order, `${p}.order`),
-      version: str(c.version, `${p}.version`),
-      path,
-      immersive: bool(c.immersive, `${p}.immersive`),
-      hasFront: bool(c.hasFront, `${p}.hasFront`),
-      bytes: {
-        base: num(bytes.base, `${p}.bytes.base`),
-        full: num(bytes.full, `${p}.bytes.full`),
-        half: num(bytes.half, `${p}.bytes.half`),
-      },
-    };
+  const cards = arr(root.cards, 'index.cards').map((c, i) => parseEntry(c, `index.cards[${i}]`, schema));
+  unique(
+    cards.map((c) => c.id),
+    'index.cards',
+  );
+  if (schema === 1) {
+    const implicit: CardSet = { id: IMPLICIT_SET_ID, name: '', order: 0, year: null, cover: null, symbol: null };
+    return { schema, sets: [implicit], rarities: [], sections, cards };
+  }
+  const sets = arr(root.sets, 'index.sets').map((s, i) => parseSet(s, `index.sets[${i}]`));
+  const rarities = arr(root.rarities, 'index.rarities').map((r, i) => parseRarity(r, `index.rarities[${i}]`));
+  unique(
+    sets.map((s) => s.id),
+    'index.sets',
+  );
+  unique(
+    rarities.map((r) => r.id),
+    'index.rarities',
+  );
+  cards.forEach((c, i) => {
+    if (!sets.some((s) => s.id === c.set)) invalid(`index.cards[${i}].set`, 'an id of index.sets');
+    if (c.rarity !== null && !rarities.some((r) => r.id === c.rarity)) {
+      invalid(`index.cards[${i}].rarity`, 'null or an id of index.rarities');
+    }
   });
-  return { schema, sections, cards };
+  return { schema, sets, rarities, sections, cards };
 }
 
 // ---------------------------------------------------------------- card.json
@@ -296,17 +404,12 @@ export function parseCard(json: unknown): Card {
   const win = obj(c.window, 'card.window');
   const img = obj(c.images, 'card.images');
   const tilt = obj(c.tilt, 'card.tilt');
-  const id = str(c.id, 'card.id');
-  if (!ID_PATTERN.test(id)) invalid('card.id', 'lowercase a-z, 0-9 and "-"');
+  const cardId = id(c.id, 'card.id');
   const layers = arr(c.layers, 'card.layers').map((l, i) => parseLayer(l, `card.layers[${i}]`));
   if (layers.length === 0) invalid('card.layers', 'at least one layer');
   return {
     schema,
-    id,
-    name: str(c.name, 'card.name'),
-    number: str(c.number, 'card.number'),
-    section: str(c.section, 'card.section'),
-    order: num(c.order, 'card.order'),
+    id: cardId,
     version: str(c.version, 'card.version'),
     artPx: size(c.artPx, 'card.artPx'),
     pxPerUnit: num(c.pxPerUnit, 'card.pxPerUnit'),

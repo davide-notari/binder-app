@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupCards } from '../../src/data/binder';
+import { binderSequence, collectionSets, groupCards } from '../../src/data/binder';
 import type { CardIndex, CardIndexEntry } from '../../src/data/card-format';
 import { Transition, easeInOut } from '../../src/interaction/motion';
 import { TiltInput, DEFAULT_TILT_SETTINGS } from '../../src/interaction/tilt';
@@ -27,12 +27,14 @@ describe('card view state machine (SPEC §6)', () => {
 });
 
 describe('groupCards', () => {
-  const entry = (id: string, section: string, order: number): CardIndexEntry => ({
+  const entry = (id: string, section: string, order: number, set = 'a'): CardIndexEntry => ({
     id,
     name: id,
     number: String(order),
+    set,
     section,
     order,
+    rarity: null,
     version: 'v',
     path: `cards/${id}.card`,
     immersive: false,
@@ -41,8 +43,11 @@ describe('groupCards', () => {
   });
 
   it('orders sections as listed, then unknown ones, and cards by order then id', () => {
+    const set = (id: string, order: number) => ({ id, name: id, order, year: null, cover: null, symbol: null });
     const index: CardIndex = {
-      schema: 1,
+      schema: 2,
+      sets: [set('a', 1), set('b', 2), set('c', 1)],
+      rarities: [],
       sections: ['promo', 'main'],
       cards: [
         entry('b', 'main', 2),
@@ -50,13 +55,18 @@ describe('groupCards', () => {
         entry('a', 'main', 2),
         entry('p', 'promo', 20260510),
         entry('c', 'main', 1.5),
+        entry('other', 'main', 1, 'b'),
       ],
     };
-    expect(groupCards(index).map((g) => [g.section, g.cards.map((c) => c.id)])).toEqual([
+    expect(groupCards(index, 'a').map((g) => [g.section, g.cards.map((c) => c.id)])).toEqual([
       ['promo', ['p']],
       ['main', ['c', 'a', 'b']],
       ['future', ['x']],
     ]);
+    expect(binderSequence(index, 'a').map((c) => c.id)).toEqual(['p', 'c', 'a', 'b', 'x']);
+    expect(binderSequence(index, 'b').map((c) => c.id)).toEqual(['other']);
+    // newest expansion first
+    expect(collectionSets(index).map((s) => s.id)).toEqual(['b', 'a', 'c']);
   });
 });
 

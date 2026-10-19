@@ -45,6 +45,9 @@ test('the app shell opens without the server after the first visit; the manifest
       scope: '/binder-app/',
     });
 
+    await page.reload(); // the first load is not controlled yet; from now on the service worker answers
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+
     server.kill();
     await expect
       .poll(() =>
@@ -54,7 +57,15 @@ test('the app shell opens without the server after the first visit; the manifest
         ),
       )
       .toBe('down');
-    await page.reload();
+    // a short retry: Chromium can refuse a navigation in the instant the server goes away; a missing precache or
+    // navigation route fails every attempt
+    await expect(async () => {
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'Chiave di accesso' })).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 8000 });
+    // another URL inside the scope: navigation fallback to the precached index.html (the session remembers
+    // ?browser=1, so the key screen shows again)
+    await page.goto('./?another=1');
     await expect(page.getByRole('heading', { name: 'Chiave di accesso' })).toBeVisible();
   } finally {
     server.kill();

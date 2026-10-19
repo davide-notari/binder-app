@@ -3,20 +3,33 @@
 This is the contract between the card production pipeline (the "immersive card" kit, Blender, `export_card.py`)
 and the app. The app must treat it as read-only input and must not need anything else to reproduce a card.
 
-- Produced by: `binder-cards/tools/export_card.py`
+- Produced by: `binder-cards/tools/export_card.py` (cards), `binder-cards/tools/editor.py` (catalog: expansions,
+  rarities, descriptive data), shared rules in `binder-cards/tools/catalog.py`
 - Verified by: `binder-cards/tools/verify_card.py` (renders frames from this data only and compares them
   with the approved preview frames; current result on the test card: mean abs diff ≤ 0.64 / 255)
-- Example data: `tests/fixtures/cards-repo/` (synthetic test cards, no real artwork: safe to commit)
+- Example data: `tests/fixtures/cards-repo/` (schema 2: two synthetic expansions, rarities, three cards; built
+  with the exporter's tools by `tools/make_schema2_fixture.py`) and `tests/fixtures/cards-repo-v1/` (schema 1, kept
+  for the transition). Synthetic test cards only, no real artwork: safe to commit.
 
-`schema` is `1`. Any breaking change bumps it; the app must refuse (with a clear Italian message) a schema it
-does not know, instead of guessing.
+`schema` is `2` (since the expansions, rarities and catalog change of M4). The app reads schema 1 **and** 2 (a
+device can still hold schema 1 data in its cache). Any incompatible change bumps it; the app must refuse (with a
+clear Italian message) a schema it does not know, instead of guessing. A new **optional** field (in a card, an
+expansion or a rarity) does not bump the schema: the app ignores keys it does not know.
+
+`index.json` is the **catalog**: expansions, rarities and the descriptive data of every card (name, number,
+expansion, section, order, rarity). Davide edits it with a local editor without re-exporting: card versions do not
+change, so the app downloads nothing again except `index.json`, and the UI re-reads names, numbers, rarities and
+expansion membership from the refreshed index. `card.json` holds **only rendering data**.
 
 ## 1. Repository layout (`binder-cards`, private)
 
 ```
-index.json                        list of cards (fetched at every launch)
+index.json                        catalog: expansions, rarities, cards (fetched at every launch)
+sets/<set-id>/cover.webp          expansion cover (optional; any shape, lossy q92, ≤ 2048 px on the long side)
+sets/<set-id>/symbol.webp         expansion symbol (optional; lossless, ≤ 512 px)
+rarities/<rarity-id>/symbol.webp  rarity symbol (optional; lossless, ≤ 512 px)
 cards/<id>.card/
-  card.json                       everything about one card (geometry, camera, files)
+  card.json                       rendering data of one card (geometry, camera, files)
   thumb.webp                      grid thumbnail, 400 px wide, lossy
   front.webp                      "carta normale" (full card with the Pokémon card UI), ≤1800 px wide, lossy q95
                                   (may be missing: then images.front is null and the app shows artwork.webp)
@@ -27,24 +40,48 @@ refs/<id>/                        reference frames for tests (NOT used by the ap
 tools/                            export / verify scripts
 ```
 
-## 2. `index.json`
+## 2. `index.json` (schema 2)
 
 ```json
 {
-  "schema": 1,
-  "sections": ["promo", "main"],      // known sections, in display order
+  "schema": 2,
+  "sets": [
+    {
+      "id": "unione-eterna",              // [a-z0-9-]
+      "name": "Unione Eterna",            // display name (Italian UI)
+      "order": 1,                         // sequence of the expansions (number, decimals allowed; higher = newer)
+      "year": 2026,                       // integer or null
+      "cover": {                          // or null: an expansion may never have one
+        "path": "sets/unione-eterna/cover.webp",
+        "size": [2048, 683],              // [w, h] px; ANY shape: lay it out with its size
+        "version": "30f1e3660803"         // content hash of the file: changes when the image changes
+      },
+      "symbol": null                      // same object as cover (sets/<id>/symbol.webp), or null
+    }
+  ],
+  "rarities": [
+    {
+      "id": "illustrazione-rara",         // [a-z0-9-]
+      "name": "Illustrazione rara",
+      "order": 5,
+      "symbol": null                      // { "path": "rarities/<id>/symbol.webp", "size", "version" } or null
+    }
+  ],
+  "sections": ["promo", "main"],          // known sections, in display order
   "cards": [
     {
-      "id": "236-139-celebi",         // [a-z0-9-], also the folder name cards/<id>.card
-      "name": "Celebi",               // display name (Italian UI)
-      "number": "236",                // STRING, exactly as printed on the card: "236", "10-05-2026", "SVP 001"...
-      "section": "main",              // "main" = regular cards, "promo" = promo cards
-      "order": 236,                   // position inside its section (number, decimals allowed; sort ascending, then by id)
-      "version": "61497c5479eb",      // content hash of the bundle: changes whenever any file changes
-      "path": "cards/celebi.card",
-      "immersive": true,              // has an immersive camera track
-      "hasFront": true,               // front.webp exists
-      "bytes": { "base": 812345, "full": 31234567, "half": 8123456 }   // download sizes per group
+      "id": "kc-236-celebi",              // [a-z0-9-], also the folder name cards/<id>.card
+      "name": "Celebi",                   // display name (Italian UI)
+      "number": "236",                    // STRING, exactly as printed: "236", "10-05-2026", "SVP 001"... (may be "")
+      "set": "unione-eterna",             // always an id of "sets"
+      "section": "main",                  // "main" = regular cards, "promo" = promo cards
+      "order": 236,                       // position inside its section of its expansion (decimals allowed)
+      "rarity": "illustrazione-rara",     // an id of "rarities", or null
+      "version": "3f43be533cc6",          // content hash of the bundle: changes whenever any card file changes
+      "path": "cards/kc-236-celebi.card", // always "cards/<id>.card"
+      "immersive": true,                  // has an immersive camera track
+      "hasFront": true,                   // front.webp exists
+      "bytes": { "base": 1233431, "full": 10136028, "half": 3417762 }   // download sizes per group
     }
   ]
 }
@@ -52,14 +89,27 @@ tools/                            export / verify scripts
 
 `base` = card.json + thumb + front + artwork. `full` / `half` = all layer files of that resolution.
 
+Guarantees of the exporter and the editor (fail-closed, every write is validated; the app checks them again):
+ids are unique inside `sets`, `rarities` and `cards`; `cards[].set` always exists; `cards[].rarity` is null or
+exists; image paths are exactly `sets/<id>/cover.webp`, `sets/<id>/symbol.webp`, `rarities/<id>/symbol.webp`. An
+expansion may have no cards. `sets` and `rarities` are sorted by `order`, then `id`; `cards` by expansion order,
+section, `order`, `id` — the app does not rely on any sorting.
+
+**Schema 1** (transition): no `sets`, `rarities`, `cards[].set`, `cards[].rarity`. The app shows it as a single
+expansion without name, year, cover or rarities.
+
+**Layout decisions of the app** (Davide, M4): the collection lists the expansions **newest first** (highest
+`order`); the app **always opens on the collection**, also with a single expansion; inside an expansion the
+**promo cards are on top**; a cover is a **full-width banner** with its own shape (cropped in the middle only when
+taller than wide), a gradient with the symbol or the initials when there is none. Rarity: symbol next to the
+number in the binder, symbol and name in the card view; nothing when null.
+
 **Sections.** Promo cards often have no regular number (for example a date) and must not be mixed with the
-regular cards. The app groups cards by `section` and sorts each group by `order`. Where the promo section is shown
-(a separate area of the binder, or before card 1) is a UI decision, not a data one: the data supports both.
-Unknown section values must be shown after the known ones, never dropped. The `cards` array is already sorted
-(section in `sections` order, then `order`, then `id`), but the app must not rely on that.
+regular cards. Inside each expansion the app groups cards by `section` and sorts each group by `order`. Unknown
+section values are shown after the known ones, never dropped.
 
 `order` defaults (exporter): a `DD-MM-YYYY` date → `YYYYMMDD` (promos sort chronologically), an integer → itself,
-otherwise the last group of digits, otherwise 0. Davide can override it (`--order`, e.g. `235.5` to insert a card).
+otherwise the last group of digits, otherwise 0. Davide can override it (e.g. `235.5` to insert a card).
 `number` is display text only: never parse it in the app.
 
 ## 3. World and camera conventions
@@ -82,8 +132,8 @@ Top level:
 
 | key | type | meaning |
 |---|---|---|
-| `schema` | int | 1 |
-| `id`, `name`, `number` (string), `section`, `order`, `version` | | as in index.json |
+| `schema` | int | 2 (1 also accepted) |
+| `id`, `version` | | as in index.json. Schema 1 also had `name`, `number`, `section`, `order`: the app never reads them (descriptive data comes from the index entry) |
 | `artPx` | [w, h] | artwork size in pixels (standard 3024×4158) |
 | `pxPerUnit` | float | artwork pixels per world unit on the window plane |
 | `camera` | object | `lensMm`, `sensorHeightMm` (36), `vfovRad`, `aspect`, `near`, `far`, `homeDistance`, `homePosition`, `homeRotation` (quaternion [x,y,z,w]) |

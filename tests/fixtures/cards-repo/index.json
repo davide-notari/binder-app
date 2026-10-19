@@ -1,18 +1,77 @@
 {
-  "schema": 1,
+  "schema": 2,
+  "sets": [
+    {
+      "id": "espansione-prova",
+      "name": "Espansione di prova",
+      "order": 1,
+      "year": 2026,
+      "cover": {
+        "path": "sets/espansione-prova/cover.webp",
+        "size": [
+          1536,
+          512
+        ],
+        "version": "585dbd599c34"
+      },
+      "symbol": {
+        "path": "sets/espansione-prova/symbol.webp",
+        "size": [
+          256,
+          256
+        ],
+        "version": "ea16703534e6"
+      }
+    },
+    {
+      "id": "seconda-espansione",
+      "name": "Seconda espansione",
+      "order": 2,
+      "year": null,
+      "cover": null,
+      "symbol": null
+    }
+  ],
+  "rarities": [
+    {
+      "id": "comune",
+      "name": "Comune",
+      "order": 1,
+      "symbol": null
+    },
+    {
+      "id": "rara",
+      "name": "Rara",
+      "order": 2,
+      "symbol": {
+        "path": "rarities/rara/symbol.webp",
+        "size": [
+          256,
+          256
+        ],
+        "version": "f8a144e217b9"
+      }
+    }
+  ],
+  "sections": [
+    "promo",
+    "main"
+  ],
   "cards": [
     {
       "id": "testcard-promo",
       "name": "Promo di prova",
       "number": "10-05-2026",
+      "set": "espansione-prova",
       "section": "promo",
       "order": 20260510,
-      "version": "12ce6a1d474c",
+      "rarity": null,
+      "version": "232116d39034",
       "path": "cards/testcard-promo.card",
       "immersive": false,
       "hasFront": false,
       "bytes": {
-        "base": 222415,
+        "base": 222334,
         "full": 27200,
         "half": 23878
       }
@@ -21,21 +80,37 @@
       "id": "testcard",
       "name": "Carta di prova",
       "number": "1",
+      "set": "espansione-prova",
       "section": "main",
       "order": 1,
-      "version": "d5551aea8dea",
+      "rarity": "rara",
+      "version": "a60eed49825f",
       "path": "cards/testcard.card",
       "immersive": true,
       "hasFront": true,
       "bytes": {
-        "base": 251893,
+        "base": 251829,
+        "full": 27200,
+        "half": 23878
+      }
+    },
+    {
+      "id": "testcard-bis",
+      "name": "Carta di prova bis",
+      "number": "2",
+      "set": "seconda-espansione",
+      "section": "main",
+      "order": 2,
+      "rarity": "comune",
+      "version": "21caa3cf08e5",
+      "path": "cards/testcard-bis.card",
+      "immersive": true,
+      "hasFront": true,
+      "bytes": {
+        "base": 251833,
         "full": 27200,
         "half": 23878
       }
     }
-  ],
-  "sections": [
-    "promo",
-    "main"
   ]
 }
