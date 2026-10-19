@@ -64,7 +64,11 @@ python3 tools/make_premultiply_fixture.py   regenerate src/dev/premultiply-fixtu
   upload, context loss/restore, smoke. Comparison images go to `test-results/` (git-ignored, wiped every run).
 - Dev pages (dev server only): `/?dev=render&card=<id>&t=<sec>[&res=half][&w=<px>&h=<px>][&ui=0]` renders a card
   (tap: hide/show panel, press and hold: reference frame); `/?dev=premultiply` checks the premultiplied upload.
-- Renderer sampling follows RENDERING.md §2a (reference pyramid + OpenCV bicubic + half-pixel grid).
+- Renderer sampling follows RENDERING.md §2a (reference pyramid + OpenCV bicubic + half-pixel grid); memory plan §6a.
+- Dev server home (`/`): temporary card list → card view on the local cards (the real binder comes in M4).
+  `?debug=1` debug overlay (fps, memory plan, tilt tuning; remembered for the session, `?debug=0` turns it off),
+  `?speed=10` faster immersive flight (tests), `/?dev=memory` GPU memory test page for the iPhone.
+- `CARDS_DIR=../binder-cards npm run test:unit` also checks tilt fit and memory plan on the real cards.
 - Dev cards: `tests/fixtures/cards-repo` by default; `VITE_LOCAL_CARDS=../binder-cards` in `.env.local` for the
   real cards. The `/dev-cards/` middleware (`tools/dev-cards.ts`) exists only in the dev server.
 - iPhone during development: `npm run dev`, then `cloudflared tunnel --url http://localhost:5173`.

@@ -93,6 +93,11 @@ Home Screen web app; persistent storage is excluded from eviction). Show its res
   `artwork.webp`): the binder is fully browsable offline. Show "N carte nuove" if new ids appeared.
 - **When a card is opened in Artwork mode**: show `artwork.webp` immediately, download the half layers
   (3D becomes available), then the full layers if this device needs them (CARD_FORMAT §5). Show progress discreetly.
+  *M2 change: the app downloads the **full** layers directly and keeps on the GPU only the pyramid levels this
+  screen can use (RENDERING.md §6a); half layers are only a fallback for memory or texture-size limits. Reason:
+  half textures change the picture visibly against the approved frames (mean diff 1.1–3.4, p99 up to 72), so a
+  half→full swap would be a visible jump. 3D becomes available when the full layers are on the GPU
+  (1–2 s from local files; downloads depend on the network, then the cache).*
 - **Layer cache limit**: default 500 MB (setting: 250 MB / 500 MB / 1 GB / "tutto"). Evict least-recently-opened
   cards' layers first; base files are never evicted.
 - Settings: space used (`navigator.storage.estimate()` + own bookkeeping), "Svuota cache 3D", "Scarica tutto per

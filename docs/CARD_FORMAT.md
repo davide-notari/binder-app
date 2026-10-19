@@ -144,6 +144,10 @@ Use `half` only when it cannot be seen. With display height `Hs` (device pixels)
 At 3024×4158 the half textures cover tilt on every current iPhone, while immersive close-ups need full on most of them.
 Also fall back to half if any full texture exceeds `MAX_TEXTURE_SIZE` or the memory budget (RENDERING.md §6).
 
+*App note (M2, no format change): with the reference sampling of RENDERING.md §2a, half textures are visibly
+different from the approved frames even in the home view, so the app uses full textures whenever the memory
+budget allows (keeping only the pyramid levels the screen needs, RENDERING.md §6a) and half only as a fallback.*
+
 ## 6. Immersive track
 
 ```json

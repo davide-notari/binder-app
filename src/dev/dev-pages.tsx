@@ -1,6 +1,7 @@
 // Development pages, loaded only by the dev server (see app.tsx).
 import { devStrings } from '../ui/strings';
 import './dev.css';
+import { MemoryPage } from './memory-page';
 import { PremultiplyPage } from './premultiply-page';
 import { RenderPage } from './render-page';
 
@@ -10,6 +11,8 @@ export function DevPage({ page }: { page: string }) {
       return <RenderPage />;
     case 'premultiply':
       return <PremultiplyPage />;
+    case 'memory':
+      return <MemoryPage />;
     default:
       return (
         <main class="dev-text">

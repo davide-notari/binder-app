@@ -2,7 +2,7 @@
 
 export class RendererError extends Error {
   constructor(
-    readonly code: 'webgl2-unavailable' | 'shader' | 'texture-too-large' | 'texture-size',
+    readonly code: 'webgl2-unavailable' | 'shader' | 'texture-too-large' | 'texture-size' | 'out-of-memory',
     message: string,
   ) {
     super(message);

@@ -1,20 +1,58 @@
 import type { FunctionComponent } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import { devStrings, strings } from './ui/strings';
+import type { CardIndexEntry } from './data/card-format';
+import type { CardSource } from './data/source';
+import { debugEnabled } from './debug/debug-store';
+import { DebugOverlay } from './debug/overlay';
+import { recoverAfterCrash } from './render/gpu-limit';
+import { CardList } from './ui/card-list';
+import { CardView } from './ui/card-view';
+import { strings } from './ui/strings';
 
-// M0 placeholder screen. Real screens (binder, card view, settings) arrive in later milestones.
+recoverAfterCrash();
+
 export function App() {
+  const showDebug = debugEnabled();
   if (import.meta.env.DEV) {
     const devPage = new URLSearchParams(location.search).get('dev');
     if (devPage) return <DevPageLoader page={devPage} />;
+    return (
+      <>
+        <LocalBinder />
+        {showDebug && <DebugOverlay />}
+      </>
+    );
   }
+  // Until M3 (GitHub source and key screen) the published app is a placeholder.
   return (
     <main class="placeholder">
       <h1>{strings.appName}</h1>
       <p>{strings.underConstruction}</p>
-      {import.meta.env.DEV && <DevCardsStatus />}
       <p class="version">{strings.version(__APP_VERSION__)}</p>
     </main>
+  );
+}
+
+// Development: binder and card view on the local card repository (dev/local-source.ts via dynamic import).
+function LocalBinder() {
+  const [source, setSource] = useState<CardSource | null>(null);
+  const [open, setOpen] = useState<CardIndexEntry | null>(null);
+  useEffect(() => {
+    void import('./data/local-source').then((m) => {
+      setSource(new m.LocalSource());
+    });
+  }, []);
+  if (!source) return null;
+  return open ? (
+    <CardView
+      source={source}
+      entry={open}
+      onBack={() => {
+        setOpen(null);
+      }}
+    />
+  ) : (
+    <CardList source={source} onOpen={setOpen} />
   );
 }
 
@@ -27,29 +65,4 @@ function DevPageLoader({ page }: { page: string }) {
     });
   }, []);
   return Page ? <Page page={page} /> : null;
-}
-
-// Development only: confirms that the dev server serves the local card repository.
-function DevCardsStatus() {
-  const [text, setText] = useState<string>(devStrings.cardsLoading);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`${import.meta.env.BASE_URL}dev-cards/index.json`)
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const index = (await response.json()) as { cards?: unknown };
-        if (!Array.isArray(index.cards)) throw new Error('index.json without cards');
-        if (!cancelled) setText(devStrings.cardsFound(index.cards.length));
-      })
-      .catch((error: unknown) => {
-        console.error('dev cards:', error);
-        if (!cancelled) setText(devStrings.cardsError);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return <p data-testid="dev-cards-status">{text}</p>;
 }

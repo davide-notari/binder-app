@@ -1,0 +1,63 @@
+.debug-overlay {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 48px);
+  left: calc(env(safe-area-inset-left) + 8px);
+  z-index: 10;
+  max-width: calc(100vw - 16px);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.debug-chip {
+  padding: 0.25rem 0.5rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: rgb(0 0 0 / 70%);
+  color: #9be29b;
+  font: inherit;
+}
+
+.debug-panel {
+  margin-top: 0.25rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
+  background: rgb(0 0 0 / 82%);
+}
+
+.debug-panel p {
+  margin: 0 0 0.125rem;
+  word-break: break-word;
+}
+
+.debug-panel label {
+  display: block;
+  margin-top: 0.5rem;
+}
+
+.debug-panel input[type='range'] {
+  display: block;
+  width: 100%;
+}
+
+.debug-check input {
+  margin-right: 0.375rem;
+}
+
+.debug-error {
+  color: #ffb4a8;
+}
+
+.debug-buttons {
+  display: flex;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+
+.debug-buttons button {
+  padding: 0.375rem 0.5rem;
+  border: 1px solid #555;
+  border-radius: 0.375rem;
+  background: none;
+  color: inherit;
+  font: inherit;
+}

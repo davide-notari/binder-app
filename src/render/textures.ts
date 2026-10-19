@@ -17,8 +17,13 @@ export interface TextureLevel {
 }
 
 export interface LayerTexture {
-  /** levels[0] = the texture itself; levels[k] = pyramid level k of the mirror-padded texture. */
-  readonly levels: readonly TextureLevel[];
+  /**
+   * levels[0] = the texture itself; levels[k] = pyramid level k of the mirror-padded texture.
+   * Levels finer than `finest` have been dropped (null).
+   */
+  readonly levels: readonly (TextureLevel | null)[];
+  /** Finest level still on the GPU. */
+  readonly finest: number;
   readonly width: number;
   readonly height: number;
   /** Mirror padding (texels) of the pyramid, per axis. */
@@ -30,6 +35,8 @@ export interface LayerTexture {
 export interface PyramidSpec {
   /** Total number of levels, including level 0 (sampling.ts pyramidLevels). */
   readonly levels: number;
+  /** Levels finer than this are deleted once the pyramid is built (level-plan.ts). Default 0. */
+  readonly finest?: number;
   readonly margin: readonly [number, number];
 }
 
@@ -132,8 +139,18 @@ export class TextureUploader {
       paddedSize = size;
       margin = [0, 0];
     }
-    const bytes = levels.reduce((sum, l) => sum + l.width * l.height * 4, 0);
-    return { levels, width, height, margin: pyramid.margin, bytes };
+    const finest = Math.min(pyramid.finest ?? 0, levels.length - 1);
+    const kept = levels.map((level, k) => {
+      if (k >= finest) return level;
+      gl.deleteTexture(level.texture);
+      return null;
+    });
+    if (gl.getError() === gl.OUT_OF_MEMORY) {
+      for (const level of kept) if (level) gl.deleteTexture(level.texture);
+      throw new RendererError('out-of-memory', `out of GPU memory uploading a ${width}×${height} texture`);
+    }
+    const bytes = kept.reduce((sum, l) => sum + (l ? l.width * l.height * 4 : 0), 0);
+    return { levels: kept, finest, width, height, margin: pyramid.margin, bytes };
   }
 
   /** One cv2.pyrDown step into a new texture of the given size. */

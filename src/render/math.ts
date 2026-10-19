@@ -142,3 +142,54 @@ export function slerp(a: Quat, b: Quat, t: number): Quat {
 export function toFloat32(m: Mat4): Float32Array {
   return new Float32Array(m);
 }
+
+/** Unit quaternion [x, y, z, w] of the rotation part of a matrix. */
+export function quatFromRotation(m: Mat4): Quat {
+  const m00 = at(m, 0, 0);
+  const m11 = at(m, 1, 1);
+  const m22 = at(m, 2, 2);
+  const trace = m00 + m11 + m22;
+  let q: [number, number, number, number];
+  if (trace > 0) {
+    const s = Math.sqrt(trace + 1) * 2;
+    q = [(at(m, 2, 1) - at(m, 1, 2)) / s, (at(m, 0, 2) - at(m, 2, 0)) / s, (at(m, 1, 0) - at(m, 0, 1)) / s, s / 4];
+  } else if (m00 > m11 && m00 > m22) {
+    const s = Math.sqrt(1 + m00 - m11 - m22) * 2;
+    q = [s / 4, (at(m, 0, 1) + at(m, 1, 0)) / s, (at(m, 0, 2) + at(m, 2, 0)) / s, (at(m, 2, 1) - at(m, 1, 2)) / s];
+  } else if (m11 > m22) {
+    const s = Math.sqrt(1 + m11 - m00 - m22) * 2;
+    q = [(at(m, 0, 1) + at(m, 1, 0)) / s, s / 4, (at(m, 1, 2) + at(m, 2, 1)) / s, (at(m, 0, 2) - at(m, 2, 0)) / s];
+  } else {
+    const s = Math.sqrt(1 + m22 - m00 - m11) * 2;
+    q = [(at(m, 0, 2) + at(m, 2, 0)) / s, (at(m, 1, 2) + at(m, 2, 1)) / s, s / 4, (at(m, 1, 0) - at(m, 0, 1)) / s];
+  }
+  return quatNormalize(q);
+}
+
+/** Rotation of a camera at `eye` looking at `target` (camera −Z forward, +Y up as close as possible to `up`). */
+export function lookAtRotation(eye: Vec3, target: Vec3, up: Vec3): Quat {
+  const f = normalize([target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]]);
+  const r = normalize(cross(f, up));
+  const u = cross(r, f);
+  const m = identity();
+  // columns: camera X = r, camera Y = u, camera Z = −f
+  m[0] = r[0];
+  m[1] = r[1];
+  m[2] = r[2];
+  m[4] = u[0];
+  m[5] = u[1];
+  m[6] = u[2];
+  m[8] = -f[0];
+  m[9] = -f[1];
+  m[10] = -f[2];
+  return quatFromRotation(m);
+}
+
+export function cross(a: Vec3, b: Vec3): Vec3 {
+  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+
+export function normalize(v: Vec3): Vec3 {
+  const n = Math.hypot(v[0], v[1], v[2]);
+  return [v[0] / n, v[1] / n, v[2] / n];
+}

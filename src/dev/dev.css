@@ -127,3 +127,12 @@
   font-family: ui-monospace, Menlo, monospace;
   font-size: 0.75rem;
 }
+
+.dev-text button {
+  padding: 0.625rem 1rem;
+  border: 1px solid #555;
+  border-radius: 0.5rem;
+  background: #222;
+  color: inherit;
+  font: inherit;
+}

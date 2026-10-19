@@ -1,22 +1,24 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { expect, test } from '@playwright/test';
 
-test('placeholder page renders', async ({ page }) => {
+const cardsDir = path.resolve(process.env.CARDS_DIR ?? 'tests/fixtures/cards-repo');
+const index = JSON.parse(readFileSync(path.join(cardsDir, 'index.json'), 'utf8')) as { cards: unknown[] };
+
+test('development home lists the local cards', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveTitle('Raccoglitore');
   await expect(page.getByRole('heading', { name: 'Raccoglitore' })).toBeVisible();
-  await expect(page.getByText(/^Versione \d+\.\d+\.\d+\+\w+$/)).toBeVisible();
+  await expect(page.locator('.card-list-item')).toHaveCount(index.cards.length);
 });
 
-test('dev server serves the local card repository', async ({ page, request }) => {
+test('dev server serves the local card repository', async ({ request }) => {
   const response = await request.get('/dev-cards/index.json');
   expect(response.status()).toBe(200);
   expect(response.headers()['content-type']).toContain('application/json');
-  const index = (await response.json()) as { schema: number; cards: unknown[] };
-  expect(index.schema).toBe(1);
-  expect(index.cards.length).toBeGreaterThan(0);
-
-  await page.goto('/');
-  await expect(page.getByTestId('dev-cards-status')).toHaveText(/^Sorgente locale: \d+ cart[ae]$/);
+  const json = (await response.json()) as { schema: number; cards: unknown[] };
+  expect(json.schema).toBe(1);
+  expect(json.cards.length).toBeGreaterThan(0);
 });
 
 test('dev server refuses paths outside the card repository', async ({ request }) => {
@@ -27,21 +29,17 @@ test('dev server refuses paths outside the card repository', async ({ request })
   }
 });
 
-// Early check for M1: the renderer and the fidelity tests need WebGL2 in Playwright's WebKit.
+// The renderer and the fidelity tests need WebGL2 in Playwright's WebKit.
 test('WebGL2 is available in WebKit', async ({ page }) => {
   await page.goto('/');
   const info = await page.evaluate(() => {
     const gl = document.createElement('canvas').getContext('webgl2');
     if (!gl) return null;
-    const aniso = gl.getExtension('EXT_texture_filter_anisotropic');
     return {
       maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE) as number,
-      maxAnisotropy: aniso ? (gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number) : 0,
       renderer: gl.getParameter(gl.RENDERER) as string,
     };
   });
   expect(info, 'webgl2 context').not.toBeNull();
-  test.info().annotations.push({ type: 'webgl2', description: JSON.stringify(info) });
-  console.log('WebGL2 in WebKit:', JSON.stringify(info));
   expect(info?.maxTextureSize).toBeGreaterThanOrEqual(4096);
 });

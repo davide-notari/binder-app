@@ -163,6 +163,14 @@ Inputs: `DeviceOrientationEvent` (`beta` = front/back, `gamma` = left/right, deg
 
 Starting values (tune on device with the debug panel, then hard-code): `MAX_ANGLE = 25°`, `MAX_OFFSET = 0.06`.
 
+*M2 implementation notes:* `interaction/tilt.ts` (input, filters), `render/tilt-fit.ts` (zoom), `interaction/card-scene.ts`
+(transitions, loop). Edges kept out of the viewport: the cut edges of point 4, plus the outer quad edges of
+"mirror" axes (a mirrored layer ends at its quad too), with a 2-pixel margin for the bicubic footprint. With
+`MAX_OFFSET = 0.06` the four real cards need a zoom of 1.02–1.05 (never reduced); a unit test checks 400 random
+offsets per card and screen. Axis directions: tilting the phone right moves the camera right (more of the
+background's left side shows); tilting the top edge away moves it up. Debug overlay (`?debug=1`): MAX_ANGLE,
+MAX_OFFSET, axis inversion, remembered on the device until the values are hard-coded here.
+
 ### 5.3 Immersive
 Only from "Artwork, 3D off" (the camera is exactly at home, zoom 1, so the start is seamless by construction).
 Long press (≈ 450 ms) starts it; play `card.immersive` at real time (`performance.now()`), sampling as in
@@ -175,10 +183,30 @@ loaded the long press shows a small "in download" hint instead of starting.
 - Only the open card has textures on the GPU; delete them when the card is closed.
 - Estimate per texture `w · h · 4 · 4/3` bytes. If the full set of a card exceeds the budget (start: 300 MB, adjust
   after measuring on an old iPhone), use half textures for that card even for immersive and log it.
-- Load order for a card: `artwork.webp` (instant placeholder) → half layers (3D available) → full layers in
-  background if the device needs them (swap is invisible: same geometry, same alignment).
+- ~~Load order for a card: `artwork.webp` (instant placeholder) → half layers (3D available) → full layers in
+  background if the device needs them (swap is invisible: same geometry, same alignment).~~ *Superseded in M2 by
+  §6a: half and full are not visually equivalent with the §2a sampling.*
 - When the layers are ready, also the "3D off" view is rendered from the layers (not from `artwork.webp`), so
   turning 3D on never changes sharpness.
+
+## 6a. Memory plan (M2)
+
+- **Only the levels that can be used.** The level chosen per layer (§2a) depends on the screen and the camera.
+  For the card viewport size, the renderer evaluates that choice on every pose of the immersive track and on the
+  extreme tilt views (`render/level-plan.ts`) and keeps, per layer, only the levels from the finest one ever
+  chosen. The pyramid is built from the full texture, then the finer levels are deleted. The picture is identical.
+  Real cards on an iPhone 15 / 13 mini viewport: Gallade 263 → 152 MB, Cubone 401 → 170–212 MB,
+  Celebi 350 → 198 MB, Geodude 404 → 404 MB (its deepest close-up uses level 0 on every layer).
+- **Load order:** `artwork.webp` → full layers, one at a time (decode, upload, build the pyramid, drop unused
+  levels, release the decoded image) → the view switches from the image to WebGL. Half layers only when the
+  full set does not fit the budget or exceeds `MAX_TEXTURE_SIZE` (`render/memory.ts`).
+- **Budget:** 450 MB to start (all current cards fit). iOS has no memory API, so the app learns the phone's limit
+  (`render/gpu-limit.ts`): before an upload it records "uploading N bytes"; if iOS kills the page, the next start
+  finds the record and lowers the limit below N, so that card loads with half textures next time. An
+  `OUT_OF_MEMORY` error or a context loss during an upload (app visible) does the same immediately and retries.
+  Sending the app to the background during an upload does not count. Measuring page: `/?dev=memory`.
+- **One WebGL context** for the whole app (`render/shared-renderer.ts`): card views borrow its canvas and release
+  the card's textures when they close.
 
 ## 7. Performance
 

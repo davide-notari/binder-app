@@ -27,6 +27,8 @@ interface RefsJson {
 
 const cardsDir = path.resolve(process.env.CARDS_DIR ?? 'tests/fixtures/cards-repo');
 const saveAll = process.env.FIDELITY_SAVE === '1';
+// FIDELITY_RES=half: report how half textures compare (informational, thresholds not enforced)
+const resolution = process.env.FIDELITY_RES === 'half' ? 'half' : 'full';
 const index = JSON.parse(readFileSync(path.join(cardsDir, 'index.json'), 'utf8')) as IndexJson;
 const cardsWithRefs = index.cards.filter((c) => existsSync(path.join(cardsDir, 'refs', c.id, 'refs.json')));
 
@@ -42,7 +44,7 @@ for (const card of cardsWithRefs) {
     expect(refs.version, 'reference frames belong to another export of this card').toBe(card.version);
     const [width, height] = refs.resolution;
 
-    await page.goto(`/?dev=render&card=${card.id}&res=full&w=${width}&h=${height}&ui=0`);
+    await page.goto(`/?dev=render&card=${card.id}&res=${resolution}&w=${width}&h=${height}&ui=0`);
     await page.waitForFunction(() => document.documentElement.dataset.renderState !== undefined, null, {
       timeout: 200_000,
     });
@@ -69,6 +71,7 @@ for (const card of cardsWithRefs) {
         writeFileSync(file, encodePng(sideBySide([rendered, reference, heatmap(rendered, reference)])));
         console.log(`  saved ${path.relative(process.cwd(), file)}`);
       }
+      if (resolution === 'half') continue;
       expect
         .soft(m.mean, `${card.id} frame ${frame.sourceFrame}: mean abs diff`)
         .toBeLessThanOrEqual(FIDELITY_MAX_MEAN);

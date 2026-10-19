@@ -8,6 +8,12 @@ import { mirrorMargin, pyramidLevels, referenceLevel } from './sampling';
 import { LAYER_FRAGMENT_SHADER, LAYER_VERTEX_SHADER } from './shaders';
 import { TextureUploader, type LayerTexture } from './textures';
 
+export interface LoadOptions {
+  /** Finest pyramid level to keep per layer (level-plan.ts); finer ones are dropped. Default: keep all. */
+  readonly finest?: readonly number[];
+  onProgress?(loadedLayers: number, totalLayers: number): void;
+}
+
 export interface RendererOptions {
   /** Only for tests and the dev page (pixel read-back). */
   readonly preserveDrawingBuffer?: boolean;
@@ -90,6 +96,7 @@ export class CardRenderer {
     card: Card,
     resolution: TextureResolution,
     loadImage: (layer: CardLayer) => Promise<HTMLImageElement>,
+    options: LoadOptions = {},
   ): Promise<void> {
     this.releaseLayers();
     const generation = this.generation;
@@ -111,10 +118,12 @@ export class CardRenderer {
           texture: gpu.uploader.upload(image, size, layer.opaque, {
             levels: pyramidLevels(layer, size),
             margin: mirrorMargin(layer, size),
+            finest: options.finest?.[loaded.length] ?? 0,
           }),
           texFromWorld: toFloat32(texFromWorldMatrix(layer.texFromWorld)),
         });
         image.src = ''; // drop the decoded bitmap now
+        options.onProgress?.(loaded.length, card.layers.length);
       }
     } catch (error) {
       if (this.liveGpu()) this.deleteLayers(loaded);
@@ -165,9 +174,10 @@ export class CardRenderer {
     const screen = { pose, fovy, widthPx, heightPx };
     this.lastLevels = this.layers.map((l, i) => {
       const { texture } = l;
-      const level = Math.min(
-        referenceLevel(l.layer, [texture.width, texture.height], screen),
-        texture.levels.length - 1,
+      // a dropped level can only be requested outside the planned views (e.g. tilt tuning): use the finest kept
+      const level = Math.max(
+        texture.finest,
+        Math.min(referenceLevel(l.layer, [texture.width, texture.height], screen), texture.levels.length - 1),
       );
       const levelTexture = texture.levels[level];
       if (!levelTexture) return level;
@@ -238,7 +248,7 @@ export class CardRenderer {
   }
 
   private deleteLayers(layers: readonly GpuLayer[]): void {
-    for (const l of layers) for (const level of l.texture.levels) this.gl.deleteTexture(level.texture);
+    for (const l of layers) for (const level of l.texture.levels) if (level) this.gl.deleteTexture(level.texture);
   }
 
   private createGpuProgram(): GpuProgram {
