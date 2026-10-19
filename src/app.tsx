@@ -198,6 +198,9 @@ function AppFlow({ debugOn, onDebugChange }: FlowProps) {
   const start = useCallback(
     async (remote: RemoteSource) => {
       const s = new CardStore(remote);
+      s.onStorageFull = () => {
+        setNotice(strings.storageFull);
+      };
       setStore(s);
       try {
         setIndex(await s.loadCachedIndex());
@@ -239,6 +242,9 @@ function AppFlow({ debugOn, onDebugChange }: FlowProps) {
   const submitKey = useCallback(
     async (key: string): Promise<KeyProblem | null> => {
       const s = new CardStore(new GitHubSource(key));
+      s.onStorageFull = () => {
+        setNotice(strings.storageFull);
+      };
       try {
         await s.loadCachedIndex().catch(() => null); // keeps "new cards" and the cache in step with the device
         await s.refreshIndex();

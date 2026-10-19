@@ -11,14 +11,27 @@ import { chromium, devices, expect, test } from '@playwright/test';
 const PORT = 4175;
 const BASE = `http://localhost:${PORT}/binder-app/`;
 
+/** Is the preview server answering? (bounded: a request never hangs the test) */
+async function serverUp(): Promise<boolean> {
+  try {
+    return (await fetch(BASE, { signal: AbortSignal.timeout(1000) })).ok;
+  } catch {
+    return false;
+  }
+}
+
 async function startPreview(): Promise<ChildProcess> {
-  const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore' });
+  if (await serverUp()) throw new Error(`port ${PORT} is already in use (a preview server left over?)`);
+  // vite itself, not through npx: killing npx can leave the real server running
+  const server = spawn(
+    process.execPath,
+    ['node_modules/vite/bin/vite.js', 'preview', '--port', String(PORT), '--strictPort'],
+    {
+      stdio: 'ignore',
+    },
+  );
   for (let i = 0; i < 100; i++) {
-    try {
-      if ((await fetch(BASE)).ok) return server;
-    } catch {
-      // not up yet
-    }
+    if (await serverUp()) return server;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   server.kill();
@@ -36,6 +49,8 @@ test('the app shell opens without the server after the first visit; the manifest
     await expect(page.getByRole('heading', { name: 'Chiave di accesso' })).toBeVisible();
     await page.waitForFunction(
       async () => (await navigator.serviceWorker.getRegistration())?.active?.state === 'activated',
+      undefined,
+      { timeout: 15_000 },
     );
     const manifest = (await (await page.request.get('manifest.webmanifest')).json()) as Record<string, unknown>;
     expect(manifest).toMatchObject({
@@ -46,17 +61,10 @@ test('the app shell opens without the server after the first visit; the manifest
     });
 
     await page.reload(); // the first load is not controlled yet; from now on the service worker answers
-    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout: 15_000 });
 
     server.kill();
-    await expect
-      .poll(() =>
-        fetch(BASE).then(
-          () => 'up',
-          () => 'down',
-        ),
-      )
-      .toBe('down');
+    await expect.poll(serverUp, { message: 'preview server stopped', timeout: 10_000 }).toBe(false);
     // a short retry: Chromium can refuse a navigation in the instant the server goes away; a missing precache or
     // navigation route fails every attempt
     await expect(async () => {

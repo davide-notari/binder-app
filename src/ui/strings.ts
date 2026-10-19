@@ -40,6 +40,8 @@ export const strings = {
   firstStartOffline: 'Serve la connessione per il primo avvio.',
   rateLimited: 'GitHub chiede di aspettare un po’: riprova più tardi.',
   offline3d: 'Serve la connessione per scaricare il 3D.',
+  storageFull:
+    'Lo spazio sull’iPhone è quasi finito: le carte si vedono, ma non restano salvate per l’uso offline. Libera spazio nelle Impostazioni di iOS.',
   updateAvailable: 'Nuova versione disponibile — tocca per aggiornare',
   cardCount: (n: number) => (n === 1 ? '1 carta' : `${n} carte`),
   newInSet: (n: number) => (n === 1 ? '1 nuova' : `${n} nuove`),

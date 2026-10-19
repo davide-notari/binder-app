@@ -287,6 +287,29 @@ test('the 3D layer cache evicts the least recently opened card beyond its limit'
   expect(await layersOf('testcard-promo')).toHaveLength(6);
 });
 
+test('storage full: the 3D of other cards is freed, then the card is shown without being kept', async ({ page }) => {
+  const state = newState();
+  await mockGitHub(page, state);
+  await onboard(page);
+  await page.click('[data-card="testcard"]');
+  await page.getByRole('button', { name: 'Artwork' }).click();
+  await expect(page.locator('.card-view')).toHaveAttribute('data-ready', '1', { timeout: 30_000 });
+  await page.getByRole('button', { name: /Indietro/ }).click();
+  await expect(page.locator('.card-view')).toHaveCount(0);
+
+  // from now on every new file is refused, as on a full phone
+  await page.evaluate(() => {
+    Cache.prototype.put = () => Promise.reject(new DOMException('full', 'QuotaExceededError'));
+  });
+  await page.click('[data-card="testcard-promo"]');
+  await page.getByRole('button', { name: 'Artwork' }).click();
+  await expect(page.locator('.card-view')).toHaveAttribute('data-ready', '1', { timeout: 30_000 }); // still works
+  const layers = (await cachedFiles(page)).filter((f) => f.includes('/layers/'));
+  expect(layers).toEqual([]); // the other card's 3D was freed to make room
+  await page.getByRole('button', { name: /Indietro/ }).click();
+  await expect(page.getByText(/Lo spazio sull’iPhone è quasi finito/)).toBeVisible();
+});
+
 test('outside the Home Screen app the installation guide is shown', async ({ page }) => {
   const state = newState();
   await mockGitHub(page, state);

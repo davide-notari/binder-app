@@ -70,6 +70,10 @@ function parseKey(url: string): ParsedKey | null {
   return null;
 }
 
+function isQuotaError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'QuotaExceededError';
+}
+
 /** Every image of the catalog (covers and symbols of the expansions, symbols of the rarities). */
 export function catalogImages(index: CardIndex): ImageRef[] {
   return [...index.sets.flatMap((s) => [s.cover, s.symbol]), ...index.rarities.map((r) => r.symbol)].filter(
@@ -193,7 +197,7 @@ export class CardStore implements CardSource {
       const hit = await cache.match(key);
       if (hit) return typed(await hit.blob(), file);
       const blob = typed(await this.remote.fetchFile(path, signal), file);
-      await cache.put(key, new Response(blob, { headers: { 'Content-Type': blob.type } }));
+      if (!(await this.store(cache, key, blob, layerOf?.id ?? ''))) return blob; // shown, not kept (storage full)
       if (layerOf) await this.addLayerBytes(layerOf, blob.size);
       return blob;
     })().finally(() => {
@@ -279,6 +283,33 @@ export class CardStore implements CardSource {
   /** Total download size of the full layers of every card (index.json "bytes.full"). */
   allLayersBytes(): number {
     return this.index?.cards.reduce((sum, c) => sum + c.bytes.full, 0) ?? 0;
+  }
+
+  /** Called when the phone's storage is full (a file could not be saved, even after freeing space). */
+  onStorageFull: (() => void) | null = null;
+
+  /**
+   * Saves a downloaded file. When the phone's storage is full, frees the 3D of the other cards (least recently
+   * opened first) and tries once more; if it still does not fit, the file is used without being kept.
+   */
+  private async store(cache: Cache, key: string, blob: Blob, keepId: string): Promise<boolean> {
+    const put = () => cache.put(key, new Response(blob, { headers: { 'Content-Type': blob.type } }));
+    try {
+      await put();
+      return true;
+    } catch (error) {
+      if (!isQuotaError(error)) throw error;
+    }
+    const records = (await idbEntries<LayerRecord>('layers')).sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+    for (const [id] of records) if (id !== keepId) await this.deleteLayers(id);
+    try {
+      await put();
+      return true;
+    } catch (error) {
+      if (!isQuotaError(error)) throw error;
+      this.onStorageFull?.();
+      return false;
+    }
   }
 
   /** Total size of the cached 3D layers. */
