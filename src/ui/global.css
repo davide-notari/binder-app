@@ -57,3 +57,31 @@ body {
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
 }
+
+/* segmented control (card view modes, settings) */
+.segmented {
+  display: flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: #262626;
+}
+
+.segmented button {
+  min-height: 40px;
+  padding: 0 1.125rem;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.9375rem;
+}
+
+.segmented button[aria-pressed='true'] {
+  background: #f2f2f2;
+  color: #111;
+}
+
+button:disabled {
+  opacity: 0.4;
+}

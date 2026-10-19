@@ -9,7 +9,7 @@ test('development home lists the local cards', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveTitle('Raccoglitore');
   await expect(page.getByRole('heading', { name: 'Raccoglitore' })).toBeVisible();
-  await expect(page.locator('.card-list-item')).toHaveCount(index.cards.length);
+  await expect(page.locator('.binder-card')).toHaveCount(index.cards.length);
 });
 
 test('dev server serves the local card repository', async ({ request }) => {

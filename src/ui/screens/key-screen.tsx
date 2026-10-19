@@ -19,9 +19,11 @@ interface Props {
   readonly initialProblem?: KeyProblem | undefined;
   /** Validates and stores the key; resolves with a problem, or null when the binder can open. */
   readonly onSubmit: (key: string) => Promise<KeyProblem | null>;
+  /** Replacing a key from the settings: going back keeps the current one. */
+  readonly onCancel?: (() => void) | undefined;
 }
 
-export function KeyScreen({ initialProblem, onSubmit }: Props) {
+export function KeyScreen({ initialProblem, onSubmit, onCancel }: Props) {
   const [key, setKey] = useState('');
   const [checking, setChecking] = useState(false);
   const [problem, setProblem] = useState<KeyProblem | null>(initialProblem ?? null);
@@ -68,6 +70,11 @@ export function KeyScreen({ initialProblem, onSubmit }: Props) {
         <button type="submit" class="primary-button" disabled={!key.trim() || checking}>
           {checking ? strings.keyChecking : strings.keyContinue}
         </button>
+        {onCancel && (
+          <button type="button" class="secondary-button" disabled={checking} onClick={onCancel}>
+            {strings.cancel}
+          </button>
+        )}
       </form>
     </main>
   );

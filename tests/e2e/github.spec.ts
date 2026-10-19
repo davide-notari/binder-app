@@ -94,7 +94,7 @@ async function onboard(page: Page): Promise<void> {
   await page.goto(APP);
   await expect(page.getByRole('heading', { name: 'Chiave di accesso' })).toBeVisible();
   await enterKey(page, TOKEN);
-  await expect(page.locator('.card-list-item')).toHaveCount(2);
+  await expect(page.locator('.binder-card')).toHaveCount(2);
   // base files of both cards (testcard has a front image, the promo card has none)
   await expect.poll(() => cachedFiles(page).then((f) => f.length), { message: 'base files' }).toBe(7);
 }
@@ -113,7 +113,7 @@ test('key screen: wrong key, then the right one; next start uses the cache and a
   await enterKey(page, 'github_pat_wrong');
   await expect(page.getByRole('alert')).toHaveText('Chiave non valida. Controlla di averla copiata tutta.');
   await enterKey(page, TOKEN);
-  await expect(page.locator('.card-list-item')).toHaveCount(2);
+  await expect(page.locator('.binder-card')).toHaveCount(2);
   await expect.poll(() => cachedFiles(page).then((f) => f.length)).toBe(7);
 
   const indexEtag = `"${createHash('sha1')
@@ -121,7 +121,7 @@ test('key screen: wrong key, then the right one; next start uses the cache and a
     .digest('hex')}"`;
   state.requests = [];
   await page.reload();
-  await expect(page.locator('.card-list-item img')).toHaveCount(2);
+  await expect(page.locator('.binder-thumb img')).toHaveCount(2);
   await expect.poll(() => state.requests.find((r) => r.path === 'index.json')?.ifNoneMatch).toBe(indexEtag);
   expect(state.requests.filter((r) => r.path !== 'index.json').map((r) => r.path)).toEqual([]); // all from the cache
 
@@ -146,7 +146,7 @@ test('a re-exported card replaces its cached files; new cards are announced', as
 
   await page.reload();
   await expect(page.getByText('1 carta nuova')).toBeVisible();
-  await expect(page.locator('.card-list-item')).toHaveCount(3);
+  await expect(page.locator('.binder-card')).toHaveCount(3);
   await expect
     .poll(async () => (await cachedFiles(page)).filter((f) => f.startsWith('testcard/')).sort())
     .toEqual([
@@ -169,7 +169,7 @@ test('offline: the binder and cached cards still work; uncached 3D asks for the 
   state.offline = true;
   await page.reload();
   await expect(page.getByText('Sei offline: vedi le carte salvate su questo iPhone.')).toBeVisible();
-  await expect(page.locator('.card-list-item img')).toHaveCount(2); // thumbnails from the cache
+  await expect(page.locator('.binder-thumb img')).toHaveCount(2); // thumbnails from the cache
 
   await page.click('[data-card="testcard"]');
   await expect(page.locator('.card-front')).toBeVisible();
@@ -181,6 +181,46 @@ test('offline: the binder and cached cards still work; uncached 3D asks for the 
   await page.getByRole('button', { name: 'Artwork' }).click();
   await expect(page.getByText('Serve la connessione per scaricare il 3D.')).toBeVisible();
   await expect(page.locator('.artwork-flat')).toBeVisible(); // the flat artwork is there anyway
+});
+
+test('offline: a cloud badge marks the cards whose 3D is not on the phone', async ({ page }) => {
+  const state = newState();
+  await mockGitHub(page, state);
+  await onboard(page);
+  await page.click('[data-card="testcard"]');
+  await page.getByRole('button', { name: 'Artwork' }).click();
+  await expect(page.locator('.card-view')).toHaveAttribute('data-ready', '1', { timeout: 30_000 });
+  await page.getByRole('button', { name: /Indietro/ }).click();
+  await expect(page.locator('.binder-badge.cloud')).toHaveCount(0);
+
+  state.offline = true;
+  await page.reload();
+  await expect(page.getByText('Sei offline: vedi le carte salvate su questo iPhone.')).toBeVisible();
+  await expect(page.locator('[data-card="testcard-promo"] .binder-badge.cloud')).toHaveCount(1);
+  await expect(page.locator('[data-card="testcard"] .binder-badge.cloud')).toHaveCount(0);
+});
+
+test('settings: replace the key (or cancel), remove the key', async ({ page }) => {
+  const state = newState();
+  await mockGitHub(page, state);
+  page.on('dialog', (dialog) => void dialog.accept());
+  await onboard(page);
+  await page.getByRole('button', { name: 'Impostazioni' }).click();
+
+  await page.getByRole('button', { name: 'Sostituisci chiave' }).click();
+  await expect(page.getByRole('heading', { name: 'Chiave di accesso' })).toBeVisible();
+  await page.getByRole('button', { name: 'Annulla' }).click();
+  await expect(page.getByRole('heading', { name: 'Impostazioni' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Sostituisci chiave' }).click();
+  await enterKey(page, TOKEN);
+  await expect(page.locator('.binder-card')).toHaveCount(2);
+
+  await page.getByRole('button', { name: 'Impostazioni' }).click();
+  await page.getByRole('button', { name: 'Rimuovi chiave' }).click();
+  await expect(page.getByRole('heading', { name: 'Chiave di accesso' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Chiave di accesso' })).toBeVisible(); // really removed
 });
 
 test('a revoked key brings back the key screen', async ({ page }) => {

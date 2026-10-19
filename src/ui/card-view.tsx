@@ -14,6 +14,7 @@ import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX } from '../interaction/motion';
 import { requestMotionPermission } from '../interaction/tilt';
 import { decodeImage } from '../render/textures';
 import { isArtwork, nextMode, type CardEvent, type CardMode } from './card-view-state';
+import { ChevronLeftIcon } from './icons';
 import { strings } from './strings';
 import './card-view.css';
 
@@ -21,6 +22,8 @@ interface Props {
   readonly source: CardSource;
   readonly entry: CardIndexEntry;
   readonly onBack: () => void;
+  /** All layers of this resolution are now cached (the 3D works offline). */
+  readonly onLayersReady?: (resolution: TextureResolution) => void;
 }
 
 interface Box {
@@ -37,6 +40,9 @@ interface Notice {
 
 /** Side margin of the card inside the screen (CSS px). */
 const MARGIN = 12;
+/** A swipe that starts this close to the left edge and moves this far right goes back to the binder. */
+const EDGE_SWIPE_ZONE = 24;
+const EDGE_SWIPE_DISTANCE = 70;
 
 /** Largest box with this aspect inside the stage; the backing store keeps the aspect within one pixel. */
 function fitBox(stageWidth: number, stageHeight: number, aspect: number): Box {
@@ -72,7 +78,7 @@ function layerFetcher(source: CardSource, cardPath: string, card: Card): LayerFe
   };
 }
 
-export function CardView({ source, entry, onBack }: Props) {
+export function CardView({ source, entry, onBack, onLayersReady }: Props) {
   const [card, setCard] = useState<Card | null>(null);
   const [failed, setFailed] = useState(false);
   const [mode, setMode] = useState<CardMode>('card');
@@ -89,8 +95,11 @@ export function CardView({ source, entry, onBack }: Props) {
   const sceneRef = useRef<CardScene | null>(null);
   const loadStarted = useRef(false);
   const press = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const edgeSwipe = useRef<{ x: number; y: number } | null>(null);
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  const readyCallback = useRef(onLayersReady);
+  readyCallback.current = onLayersReady;
 
   const dispatch = useCallback((event: CardEvent) => {
     setMode((m) => nextMode(m, event));
@@ -133,9 +142,10 @@ export function CardView({ source, entry, onBack }: Props) {
     const scene = new CardScene(
       card,
       {
-        onReady: () => {
+        onReady: (plan) => {
           setReady(true);
           setProgress(null);
+          readyCallback.current?.(plan.resolution);
         },
         onLost: () => {
           setReady(false);
@@ -263,10 +273,30 @@ export function CardView({ source, entry, onBack }: Props) {
     box ? { width: `${box.cssWidth}px`, height: `${box.cssHeight}px`, borderRadius: radius(box) } : undefined;
 
   return (
-    <div class="card-view" data-mode={mode} data-ready={ready ? '1' : '0'}>
+    <div
+      class="card-view"
+      data-mode={mode}
+      data-ready={ready ? '1' : '0'}
+      onPointerDown={(e) => {
+        // swipe from the left edge: back to the binder (SPEC.md §6)
+        edgeSwipe.current =
+          e.clientX <= EDGE_SWIPE_ZONE && mode !== 'immersive' ? { x: e.clientX, y: e.clientY } : null;
+      }}
+      onPointerUp={(e) => {
+        const start = edgeSwipe.current;
+        edgeSwipe.current = null;
+        if (start && e.clientX - start.x > EDGE_SWIPE_DISTANCE && Math.abs(e.clientY - start.y) < EDGE_SWIPE_DISTANCE) {
+          onBack();
+        }
+      }}
+      onPointerCancel={() => {
+        edgeSwipe.current = null;
+      }}
+    >
       <header class="card-view-bar">
         <button type="button" class="bar-button" onClick={onBack}>
-          ‹ {strings.back}
+          <ChevronLeftIcon />
+          <span>{strings.back}</span>
         </button>
         <div class="card-view-title">
           <span class="card-view-name">{entry.name}</span>

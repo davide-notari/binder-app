@@ -2,10 +2,16 @@
 // on-demand layers with an LRU size limit. Files live in the Cache API under version-specific keys
 // (…/__cards/<id>/<version>/<file>), the index and the LRU bookkeeping in IndexedDB. The service worker never
 // touches this cache: versions and eviction stay under the app's control.
-import { parseCardIndex, type CardIndex, type CardIndexEntry } from './card-format';
+import {
+  layerFilePath,
+  parseCardIndex,
+  type CardIndex,
+  type CardIndexEntry,
+  type TextureResolution,
+} from './card-format';
 import { idbDelete, idbEntries, idbGet, idbSet } from './idb';
 import { getCachedIndex, getLayerCacheLimit, setCachedIndex } from './settings';
-import type { CardSource, RemoteSource } from './source';
+import { fetchCard, type CardSource, type RemoteSource } from './source';
 
 const CACHE_NAME = 'binder-cards-v1';
 const KEY_PREFIX = '__cards/';
@@ -16,6 +22,8 @@ interface LayerRecord {
   readonly version: string;
   readonly bytes: number;
   readonly lastUsed: number;
+  /** Resolutions whose layer files are all cached (the 3D works offline). */
+  readonly complete?: readonly TextureResolution[];
 }
 
 export interface RefreshResult {
@@ -150,8 +158,71 @@ export class CardStore implements CardSource {
   /** Marks a card as just opened (LRU). */
   async touch(entry: CardIndexEntry): Promise<void> {
     const record = await idbGet<LayerRecord>('layers', entry.id);
-    const bytes = record?.version === entry.version ? record.bytes : 0;
-    await idbSet('layers', entry.id, { version: entry.version, bytes, lastUsed: Date.now() } satisfies LayerRecord);
+    const same = record?.version === entry.version;
+    await idbSet('layers', entry.id, {
+      version: entry.version,
+      bytes: same ? record.bytes : 0,
+      lastUsed: Date.now(),
+      complete: same ? (record.complete ?? []) : [],
+    } satisfies LayerRecord);
+  }
+
+  /** All layer files of this resolution are cached: the card's 3D works offline. */
+  async markLayersComplete(entry: CardIndexEntry, resolution: TextureResolution): Promise<void> {
+    const record = await idbGet<LayerRecord>('layers', entry.id);
+    if (record?.version !== entry.version) return;
+    const complete = [...new Set([...(record.complete ?? []), resolution])];
+    await idbSet('layers', entry.id, { ...record, complete } satisfies LayerRecord);
+  }
+
+  /** Ids of the cards whose 3D is fully on the device. */
+  async cardsWith3d(): Promise<Set<string>> {
+    const versions = new Map(this.index?.cards.map((c) => [c.id, c.version]));
+    const ids = new Set<string>();
+    for (const [id, record] of await idbEntries<LayerRecord>('layers')) {
+      if (versions.get(id) === record.version && (record.complete?.length ?? 0) > 0) ids.add(id);
+    }
+    return ids;
+  }
+
+  /**
+   * "Scarica tutto per l'uso offline": downloads the full layers of every card (the cache limit still applies;
+   * the settings screen raises it first when needed). Resolves with the number of files that failed.
+   */
+  async downloadAllLayers(onProgress?: (done: number, total: number) => void): Promise<number> {
+    const index = this.index;
+    if (!index) return 0;
+    let failures = 0;
+    const cards = [];
+    for (const entry of index.cards) {
+      try {
+        cards.push({ entry, card: await fetchCard(this, entry.path) });
+      } catch {
+        failures++;
+      }
+    }
+    const total = cards.reduce((sum, c) => sum + c.card.layers.length, 0);
+    let done = 0;
+    for (const { entry, card } of cards) {
+      await this.touch(entry);
+      let complete = true;
+      for (const layer of card.layers) {
+        try {
+          await this.fetchFile(layerFilePath(entry.path, layer, 'full'));
+        } catch {
+          failures++;
+          complete = false;
+        }
+        onProgress?.(++done, total);
+      }
+      if (complete) await this.markLayersComplete(entry, 'full');
+    }
+    return failures;
+  }
+
+  /** Total download size of the full layers of every card (index.json "bytes.full"). */
+  allLayersBytes(): number {
+    return this.index?.cards.reduce((sum, c) => sum + c.bytes.full, 0) ?? 0;
   }
 
   /** Total size of the cached 3D layers. */
@@ -166,13 +237,19 @@ export class CardStore implements CardSource {
 
   private async addLayerBytes(entry: CardIndexEntry, bytes: number): Promise<void> {
     const record = await idbGet<LayerRecord>('layers', entry.id);
-    const previous = record?.version === entry.version ? record.bytes : 0;
+    const same = record?.version === entry.version;
     await idbSet('layers', entry.id, {
       version: entry.version,
-      bytes: previous + bytes,
+      bytes: (same ? record.bytes : 0) + bytes,
       lastUsed: Date.now(),
+      complete: same ? (record.complete ?? []) : [],
     } satisfies LayerRecord);
     await this.evict(entry.id);
+  }
+
+  /** Applies the cache limit now (after the user lowers it). */
+  async enforceLimit(): Promise<void> {
+    await this.evict('');
   }
 
   /** Removes the layers of the least recently opened cards until the cache fits its limit. */

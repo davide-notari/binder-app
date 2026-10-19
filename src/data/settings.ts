@@ -8,6 +8,8 @@ const LAYER_CACHE_LIMIT = 'layerCacheLimit';
 
 /** Default limit of the 3D layer cache (SPEC.md §5). */
 export const DEFAULT_LAYER_CACHE_LIMIT = 500e6;
+/** Choices offered in the settings: 250 MB / 500 MB / 1 GB / "tutto" (Infinity). */
+export const LAYER_CACHE_LIMITS = [250e6, 500e6, 1e9, Infinity] as const;
 
 export function getToken(): Promise<string | undefined> {
   return idbGet<string>('settings', TOKEN);

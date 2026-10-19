@@ -116,3 +116,11 @@
   color: #111;
   font-weight: 600;
 }
+
+.secondary-button {
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+}

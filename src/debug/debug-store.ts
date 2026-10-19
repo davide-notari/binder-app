@@ -18,14 +18,26 @@ function notify(): void {
   }, 250);
 }
 
+const DEBUG_KEY = 'binder.debug';
+
+/** ?debug=1 / ?debug=0, or the switch in the settings; remembered on this device. */
 export function debugEnabled(): boolean {
   try {
     const param = new URLSearchParams(location.search).get('debug');
-    if (param === '1') sessionStorage.setItem('binder.debug', '1');
-    if (param === '0') sessionStorage.removeItem('binder.debug');
-    return sessionStorage.getItem('binder.debug') === '1';
+    if (param === '1') localStorage.setItem(DEBUG_KEY, '1');
+    if (param === '0') localStorage.removeItem(DEBUG_KEY);
+    return localStorage.getItem(DEBUG_KEY) === '1';
   } catch {
     return false;
+  }
+}
+
+export function setDebugEnabled(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(DEBUG_KEY, '1');
+    else localStorage.removeItem(DEBUG_KEY);
+  } catch {
+    // not remembered
   }
 }
 
