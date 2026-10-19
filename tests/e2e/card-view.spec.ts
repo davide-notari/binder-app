@@ -66,6 +66,20 @@ test('long press plays the immersive flight and ends at home', async ({ page }) 
   expect((await pixels(page)) === flat, 'the flight did not end exactly at home').toBe(true);
 });
 
+test('back to Carta after the 3D is ready shows the front image, not the WebGL view', async ({ page }) => {
+  await page.goto('/');
+  await openArtwork(page, 'testcard');
+  await expect(page.locator('.canvas-host canvas')).toBeVisible();
+  await page.getByRole('button', { name: 'Carta' }).click();
+  await expect(page.locator('.card-front')).toBeVisible();
+  await expect(page.locator('.canvas-host canvas')).toBeHidden();
+  await expect(page.locator('.artwork-frame')).toBeHidden();
+  // and back to the artwork: the 3D view is still ready, no reload
+  await page.getByRole('button', { name: 'Artwork' }).click();
+  await expect(page.locator('.canvas-host canvas')).toBeVisible();
+  await expect(page.locator('.card-front')).toHaveCount(0);
+});
+
 test('the card mode shows the front image, or the artwork when the card has none', async ({ page }) => {
   await page.goto('/');
   await page.click('[data-card="testcard"]');

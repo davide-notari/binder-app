@@ -76,8 +76,8 @@
 }
 
 .artwork-frame.hidden {
-  position: absolute;
-  visibility: hidden;
+  /* display, not visibility: a child with visibility: visible would still show through */
+  display: none;
 }
 
 .artwork-flat,

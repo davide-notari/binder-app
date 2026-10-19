@@ -298,7 +298,11 @@ export function CardView({ source, entry, onBack }: Props) {
           {images.artwork && !ready && (
             <img class="artwork-flat" src={images.artwork} alt={entry.name} draggable={false} />
           )}
-          <div class="canvas-host" ref={hostRef} style={{ visibility: ready ? 'visible' : 'hidden' }} />
+          <div
+            class="canvas-host"
+            ref={hostRef}
+            style={{ visibility: ready && isArtwork(mode) ? 'visible' : 'hidden' }}
+          />
           {mode === 'artwork-flat' && card?.immersive && <span class="hold-hint">{strings.holdHint}</span>}
           {progress && isArtwork(mode) && (
             <span class="progress-hint">{strings.preparing3d(progress[0], progress[1])}</span>
