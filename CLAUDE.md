@@ -57,7 +57,14 @@ npm test                        unit tests + WebKit tests
 npm run test:unit               Vitest (tests/unit)
 npm run test:e2e                Playwright WebKit, iPhone 15 profile (tests/e2e; own dev server on port 5174)
 CARDS_DIR=../binder-cards npm run test:e2e   same tests on the real cards (local only, nothing copied)
+FIDELITY_SAVE=1 npx playwright test tests/e2e/fidelity.spec.ts   also save side-by-side + heatmap of passing frames
+python3 tools/make_premultiply_fixture.py   regenerate src/dev/premultiply-fixture.ts (needs pillow, numpy)
 ```
+- WebKit tests: fidelity (RENDERING.md §8, every reference frame of every card with `refs/`), premultiplied
+  upload, context loss/restore, smoke. Comparison images go to `test-results/` (git-ignored, wiped every run).
+- Dev pages (dev server only): `/?dev=render&card=<id>&t=<sec>[&res=half][&w=<px>&h=<px>][&ui=0]` renders a card
+  (tap: hide/show panel, press and hold: reference frame); `/?dev=premultiply` checks the premultiplied upload.
+- Renderer sampling follows RENDERING.md §2a (reference pyramid + OpenCV bicubic + half-pixel grid).
 - Dev cards: `tests/fixtures/cards-repo` by default; `VITE_LOCAL_CARDS=../binder-cards` in `.env.local` for the
   real cards. The `/dev-cards/` middleware (`tools/dev-cards.ts`) exists only in the dev server.
 - iPhone during development: `npm run dev`, then `cloudflared tunnel --url http://localhost:5173`.

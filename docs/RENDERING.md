@@ -26,10 +26,11 @@ const gl = canvas.getContext('webgl2', {
 
 ## 2. Textures
 
-- Format `RGBA8`, mipmapped: `generateMipmap` after upload.
-- Filters: `MIN = LINEAR_MIPMAP_LINEAR`, `MAG = LINEAR`, anisotropy = max of `EXT_texture_filter_anisotropic`
-  (essential for the tilted water).
+- ~~Format `RGBA8`, mipmapped: `generateMipmap` after upload.~~ *Superseded in M1 by §2a (reference pyramid).*
+- ~~Filters: `MIN = LINEAR_MIPMAP_LINEAR`, `MAG = LINEAR`, anisotropy = max of `EXT_texture_filter_anisotropic`
+  (essential for the tilted water).~~ *Superseded in M1 by §2a (reference sampling in the shader).*
 - Wrap from `layer.wrap`: `"clamp"` → `CLAMP_TO_EDGE`, `"mirror"` → `MIRRORED_REPEAT` (WebGL2 allows it on non-power-of-two).
+  *M1: the shader applies the wrap itself (§2a): "mirror" = reflected texels, "clamp" = transparent outside.*
 - **Premultiplied alpha**, with mipmaps generated from premultiplied data (otherwise dark/light halos at edges):
   - preferred path: decode with `HTMLImageElement` (`img.decode()`), then
     `pixelStorei(UNPACK_COLORSPACE_CONVERSION_WEBGL, NONE)`, `pixelStorei(UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)`,
@@ -38,8 +39,47 @@ const gl = canvas.getContext('webgl2', {
   - a unit test must upload a small known image with semi-transparent texels and read them back on iOS Safari.
     If the result is not the exact premultiplied value, fall back to: upload straight alpha → one render-to-texture
     pass that premultiplies in the shader → `generateMipmap` on that texture.
+  - *M1 result: WebKit's `UNPACK_PREMULTIPLY_ALPHA_WEBGL` truncates instead of rounding (162 of 256 test texels off
+    by one in Playwright WebKit). The fallback is in use: straight upload → premultiply pass (exact, 256/256) →
+    reference pyramid (§2a). Check on the iPhone: `/?dev=premultiply`.*
 - Check `MAX_TEXTURE_SIZE` against `layer.size`; if any full texture is too big, use half for that card.
 - Opaque layers (`opaque: true`) can be uploaded as `RGB8`/`RGBA8` with alpha 1.
+
+## 2a. Sampling model (M1) — *adopted in M1, awaiting Davide's approval*
+
+The fidelity test (§8) showed that standard GPU filtering cannot meet the thresholds on the real cards:
+
+| WebKit, 1080×1484, mean abs diff / p99 | home frames | track frames |
+|---|---|---|
+| trilinear + anisotropy (§2 as written) | 0.85–1.14 / 11–21 | up to 1.68 / 30 |
+| one mip level per layer, bilinear | 0.51–0.72 / 7–15 | up to 1.32 / 26 |
+| **reference sampling (below)** | **0.05–0.07 / 1** | **0.04–0.12 / 1–2** |
+| `verify_card.py` (OpenCV baseline) | 0.01–0.04 / 1 | 0.01–0.13 / 1–2 |
+
+The approved frames (`anteprima_hd.py`) are an OpenCV render; the renderer reproduces its sampling exactly:
+
+- **Pixel grid.** OpenCV puts pixel centres on integer coordinates with the principal point at (W/2, H/2); WebGL
+  puts them at +0.5. The projection is shifted by half a pixel (`camera.ts`), and texel *i* of a texture is
+  sampled at texture coordinate *i* (not *i* + 0.5). Without this shift the track frames double their error.
+  The projection aspect is the backing-store W/H (square pixels, like the reference); the canvas size keeps it
+  within one pixel of `camera.aspect`.
+- **Pyramid.** Like the reference: the premultiplied texture, plus up to 3 levels of `cv2.pyrDown` (5×5 Gaussian
+  [1 4 6 4 1]/16, integer rounding, size ⌈n/2⌉, `BORDER_REFLECT_101`) of the texture padded with its mirrored
+  margin ("mirror" layers), built only while the smaller side is > 256. Built on the GPU at upload
+  (`textures.ts`); each level is its own RGBA8 texture.
+- **Level choice.** One level per layer and frame, from the texture magnification at the centre of the frame
+  (Jacobian area, as `verify_card.py`): the highest level whose magnification stays ≤ 1.4 (`sampling.ts`,
+  unit-tested against values computed with the verify_card.py code).
+- **Interpolation.** Bicubic with OpenCV's `INTER_CUBIC` kernel (Keys, A = −0.75; not Catmull-Rom), 16 texel
+  fetches, each channel clamped to [0, 1]. Level 0: "mirror" = reflected texels (`BORDER_REFLECT` = GL mirrored
+  repeat), "clamp" = transparent outside (`BORDER_CONSTANT`); levels ≥ 1: transparent outside the padded pyramid.
+- Unchanged: premultiplied "over" blending in the sRGB-encoded values, no linear colour space, projective
+  divide in the fragment shader, layers drawn back to front.
+
+Consequences: no anisotropic filtering (the reference has none either: the tilted floor looks exactly as in the
+approved video); 16 texel fetches per pixel per layer instead of 1 (to be measured on the iPhone in M2);
+GPU memory per card is the base textures plus the padded pyramid, **263–404 MB for the four real cards at full
+resolution** (more than the 300 MB starting budget of §6, to be resolved in M2).
 
 ## 3. Geometry and shaders
 
@@ -74,6 +114,8 @@ Careful with matrix layout: GLSL matrices are column-major; `texFromWorld` in JS
 
 Precision: world coordinates are small (|v| < 20), `highp` is enough. Mipmap level selection works on the
 divided `uv`, which is what we want.
+
+*M1: the fragment shader is now the reference sampler of §2a; the projective divide stays in the fragment shader.*
 
 **Magnification quality.** The reference renderer uses bicubic interpolation; GPU `LINEAR` is slightly softer when a
 texel covers more than one screen pixel (deep immersive close-ups on large phones). If the fidelity test (§8) shows
