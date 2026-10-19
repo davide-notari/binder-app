@@ -1,0 +1,38 @@
+{
+  "name": "binder-app",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Raccoglitore: private PWA binder of custom Pokémon cards, rendered with WebGL2",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.64.1",
+    "@preact/preset-vite": "2.10.6",
+    "@types/node": "24.19.2",
+    "eslint": "10.13.0",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
+  }
+}

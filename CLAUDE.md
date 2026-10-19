@@ -44,4 +44,22 @@ Local development reads cards from `tests/fixtures/cards-repo` (default) or from
 (`VITE_LOCAL_CARDS=../binder-cards` in `.env.local`, which is git-ignored).
 
 ## Commands
-(fill in during M0: dev server, build, unit tests, fidelity tests, lint)
+```
+npm ci                          install exact dependency versions (package-lock.json)
+npx playwright install webkit   one-time: WebKit browser for the Playwright tests
+npm run dev                     dev server on http://localhost:5173 (cards under /dev-cards/)
+npm run build                   type check (tsc -b) + production build into dist/ (base /binder-app/)
+npm run preview                 serve dist/ at http://localhost:4173/binder-app/
+npm run typecheck               TypeScript only
+npm run lint                    ESLint (type-checked rules)
+npm run format / format:check   Prettier write / check
+npm test                        unit tests + WebKit tests
+npm run test:unit               Vitest (tests/unit)
+npm run test:e2e                Playwright WebKit, iPhone 15 profile (tests/e2e; own dev server on port 5174)
+CARDS_DIR=../binder-cards npm run test:e2e   same tests on the real cards (local only, nothing copied)
+```
+- Dev cards: `tests/fixtures/cards-repo` by default; `VITE_LOCAL_CARDS=../binder-cards` in `.env.local` for the
+  real cards. The `/dev-cards/` middleware (`tools/dev-cards.ts`) exists only in the dev server.
+- iPhone during development: `npm run dev`, then `cloudflared tunnel --url http://localhost:5173`.
+- Deploy: every push to `main` runs `.github/workflows/deploy-pages.yml` (lint, format check, unit tests, build)
+  and publishes https://davide-notari.github.io/binder-app/. Watch it with `gh run watch`.
